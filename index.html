@@ -9,8 +9,7 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
   }
 }
 </script>
@@ -30,73 +29,89 @@ body{font-family:var(--font);color:var(--ink);background:var(--paper);font-size:
 button{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--steel);outline-offset:2px;border-radius:6px}
 
-/* ---------- header ---------- */
-header.top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 28px;padding:20px clamp(14px,3vw,32px) 14px;border-bottom:2px solid var(--ink);background:linear-gradient(#fff6ec,var(--paper))}
-.brand{display:flex;align-items:center;gap:12px}
-.logo{width:44px;height:44px;border-radius:12px;background:var(--ink);display:grid;place-items:center;box-shadow:3px 3px 0 var(--crimson)}
-h1{font-family:var(--round);font-size:clamp(24px,3.2vw,34px);letter-spacing:-.02em;margin:0;line-height:1}
-.asof{font-size:13px;color:var(--ink2);margin-top:4px}
-.meta{display:flex;flex-direction:column;gap:6px;margin-left:auto;align-items:flex-end;text-align:right}
-.sources{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
-.src{font-size:12px;padding:3px 9px;border-radius:999px;background:#fff;border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
-.src b{color:var(--ink)}
-.readonly{font-size:12px;color:var(--muted)}
-.readonly code{background:var(--paper3);padding:1px 6px;border-radius:5px;color:var(--ink);font-size:12px}
-.syncline{position:relative;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;justify-content:flex-end;font-size:12px;color:var(--ink2)}
-.syncline b{color:var(--ink)}
-.howbtn{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--steel)}
-.howbtn[aria-expanded="true"]{border-color:var(--steel)}
-.howpop{position:absolute;right:0;top:calc(100% + 6px);z-index:30;width:min(300px,86vw);background:#fff;border:2px solid var(--ink);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--ink);text-align:left;box-shadow:4px 4px 0 rgba(26,22,18,.15)}
+/* ---------- app shell: office first ----------
+   A 52px top bar, the 3D office filling the rest of the screen, and one sheet that holds the lists:
+   a bottom sheet on phones (peek · half · full), a docked side panel on wide or landscape screens.
+   The page itself never scrolls, so the office owns every gesture. */
+:root{--top:52px;--sheet-vis:80px;--side-w:380px}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+.topbar{position:fixed;top:0;left:0;right:0;z-index:30;height:var(--top);display:flex;align-items:center;gap:10px;padding:0 clamp(10px,2.4vw,24px);background:var(--paper);border-bottom:2px solid var(--ink);touch-action:pan-y pinch-zoom}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--ink);display:grid;place-items:center;box-shadow:2px 2px 0 var(--crimson);flex:none}
+.brandtext{min-width:0}
+h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-height:1.1;white-space:nowrap}
+.fresh{font-size:11.5px;line-height:1.3;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fresh.stale{color:var(--crimson);font-weight:700}
+.topacts{position:relative;display:flex;align-items:center;gap:6px;flex:none}
+.syncbtn{min-height:44px;background:var(--crimson);color:#fff;border:0;border-radius:999px;padding:0 15px;font-weight:700;cursor:pointer;white-space:nowrap}
+.syncbtn .lg{display:none}
+.infobtn{width:44px;height:44px;border-radius:50%;border:2px solid var(--ink);background:#fff;color:var(--ink);font:italic 700 19px/1 Georgia,serif;cursor:pointer;flex:none;padding:0}
+.infobtn[aria-expanded="true"]{background:var(--ink);color:#fff}
+.howpop{position:absolute;right:0;top:calc(100% + 8px);z-index:31;width:min(320px,calc(100vw - 20px));background:#fff;border:2px solid var(--ink);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--ink);text-align:left;box-shadow:4px 4px 0 rgba(26,22,18,.15)}
 .howpop[hidden]{display:none}
-@media (max-width:640px){.meta{margin-left:0;align-items:flex-start;text-align:left}.sources,.syncline{justify-content:flex-start}.howpop{left:0;right:auto}}
+.howpop p{margin:0 0 8px}.howpop p:last-child{margin:0}
+.howfacts{font-size:12.5px;color:var(--ink2)}
+.howfacts>span{display:block}
+#lastApplied:empty{display:none}
+.src{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--paper);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.src b{color:var(--ink)}
+.syncstat{position:fixed;left:50%;top:calc(var(--top) + 8px);transform:translateX(-50%);z-index:35;width:max-content;max-width:min(92vw,460px);background:#fff;border:2px solid var(--ink);border-radius:12px;padding:6px 12px;font-size:12.5px;font-weight:600;line-height:1.35;text-align:center;box-shadow:3px 3px 0 rgba(26,22,18,.15)}
+.syncstat:empty{display:none}
 
-/* ---------- toolbar ---------- */
-.bar{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px clamp(14px,3vw,32px);background:rgba(255,241,229,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-.tabs{display:flex;gap:4px;background:var(--paper3);padding:4px;border-radius:12px;flex-wrap:wrap}
+/* ---------- tabs, filter chips, names switch (inside the sheet) ---------- */
+.tabs{display:flex;gap:4px;background:var(--paper3);padding:4px;border-radius:12px}
 .tab{border:0;background:transparent;padding:7px 13px;border-radius:9px;cursor:pointer;font-weight:600;font-size:14px;color:var(--ink2)}
 .tab[aria-selected="true"]{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
-.chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{border:1.5px solid var(--line);background:#fff;padding:5px 12px;border-radius:999px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink2);display:inline-flex;gap:6px;align-items:center}
+/* the chips wrap rather than scroll sideways: a sideways scroller inside the sheet let a swipe take the browser back */
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.chip{border:1.5px solid var(--line);background:#fff;padding:5px 8px;border-radius:999px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink2);display:inline-flex;gap:6px;align-items:center;white-space:nowrap;flex:none}
 .chip .n{font-size:12px;background:var(--paper3);border-radius:999px;padding:0 7px;color:var(--ink)}
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 .chip[aria-pressed="true"] .n{background:rgba(255,255,255,.2);color:#fff}
-.toggle{margin-left:auto;display:inline-flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink2);user-select:none;background:none;border:0;padding:4px;text-align:left}
+.toggle{display:flex;width:100%;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink2);user-select:none;background:none;border:0;padding:6px 2px;text-align:left}
 .toggle small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
 .switch{width:38px;height:22px;border-radius:999px;background:#cbb9a5;position:relative;transition:background .2s;flex:none}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
 .toggle[aria-checked="true"] .switch{background:var(--green)}
 .toggle[aria-checked="true"] .switch::after{transform:translateX(16px)}
 
-main{padding:18px clamp(14px,3vw,32px) 40px}
+#app{position:fixed;left:0;right:0;bottom:0;top:var(--top);overflow:hidden}
 .view[hidden]{display:none!important}
 
-/* ---------- floor layout ---------- */
-.floorwrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
-@media (max-width:1080px){.floorwrap{grid-template-columns:1fr}}
-
-/* ---------- 3D stage ---------- */
-.stage{position:relative;height:clamp(440px,72vh,780px);border-radius:22px;border:2px solid var(--ink);overflow:hidden;
-  background:radial-gradient(120% 90% at 50% 20%,#fff8ef 0%,#f6e3cf 55%,#ecd2b4 100%);
-  box-shadow:inset 0 0 0 6px #fff7ee,6px 6px 0 rgba(26,22,18,.12);touch-action:none}
-@media (max-width:640px){.stage{height:clamp(380px,64vh,620px);border-radius:16px}}
+/* ---------- 3D office: full screen under the top bar; the camera owns every touch on it ---------- */
+.stage{position:absolute;inset:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  background:radial-gradient(120% 90% at 50% 20%,#fff8ef 0%,#f6e3cf 55%,#ecd2b4 100%)}
+.stage:focus-visible{outline:3px solid var(--steel);outline-offset:-3px;border-radius:0}
 #gl,#gl canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #gl[hidden],.labels[hidden]{display:none!important}
 #gl canvas{cursor:grab}
-#gl canvas:active{cursor:grabbing}
+.stage.panning #gl canvas{cursor:grabbing}
 .stage.hot #gl canvas{cursor:pointer}
-.floorlabel{position:absolute;top:12px;left:14px;z-index:6;background:var(--ink);color:#fff;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;padding:3px 10px;border-radius:6px;font-weight:700;pointer-events:none}
-.legend{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;flex-wrap:wrap;gap:4px 10px;max-width:calc(100% - 24px);background:rgba(255,250,244,.9);border:1.5px solid var(--line);border-radius:12px;padding:6px 10px;font-size:11.5px;font-weight:600;color:var(--ink2);pointer-events:none}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11.5px;font-weight:600;color:var(--ink2);margin:14px 2px 0}
 .legend b{font-weight:700;color:var(--ink);margin-right:2px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend i{width:11px;height:11px;border-radius:2px;display:inline-block;box-shadow:0 1px 0 rgba(0,0,0,.2)}
-.hint{position:absolute;right:12px;bottom:12px;z-index:6;font-size:11.5px;color:var(--ink2);background:rgba(255,250,244,.9);border-radius:999px;padding:4px 10px;border:1.5px solid var(--line);pointer-events:none}
-@media (max-width:760px){.hint{bottom:auto;top:44px;right:12px}}
-.resetv{position:absolute;top:10px;right:12px;z-index:6;border:2px solid var(--ink);background:#fff;border-radius:10px;padding:4px 10px;font-weight:700;font-size:12.5px;cursor:pointer}
-.loading{position:absolute;inset:0;display:grid;place-items:center;z-index:5;font-weight:700;color:var(--ink2);pointer-events:none}
+.hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;width:max-content;max-width:calc(100% - 24px);text-align:center;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.35;color:var(--ink2);background:rgba(255,250,244,.94);border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;transition:opacity .5s}
+.hint:empty{display:none}
+.hint.gone{opacity:0}
+/* camera buttons: one row, bottom right under the thumb, riding just above the sheet (zoom nearest the thumb) */
+.camctl{position:absolute;right:10px;bottom:10px;z-index:7;display:flex;gap:6px;transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}
+.camctl[hidden]{display:none}
+#app.dragging .camctl{transition:none}
+#app.sheet-full .camctl{visibility:hidden}
+.camgrp{display:flex;background:#fff;border:2px solid var(--ink);border-radius:14px;box-shadow:3px 3px 0 rgba(26,22,18,.15);overflow:hidden}
+.camctl button{width:44px;height:44px;min-height:44px;display:grid;place-items:center;border:0;border-radius:0;background:none;padding:0;cursor:pointer;color:var(--ink)}
+.camctl button+button{border-left:1.5px solid var(--line)}
+.camctl button:hover{background:var(--paper)}
+.camctl button:active{background:var(--paper3)}
+.camctl button[aria-disabled="true"]{color:#c4b29c;background:none;cursor:default}
+.camctl button:focus-visible{outline-offset:-4px}
+.camctl svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.loading{position:absolute;left:0;right:0;top:0;bottom:var(--sheet-vis);display:grid;place-items:center;z-index:5;font-weight:700;color:var(--ink2);pointer-events:none}
 .loading span{background:#fff;border:2px solid var(--ink);border-radius:12px;padding:8px 14px;box-shadow:3px 3px 0 rgba(26,22,18,.15)}
 .loading[hidden]{display:none}
-.stage.nogl .legend,.stage.nogl .hint,.stage.nogl .resetv,.stage.nogl .loading{display:none}
-.stage.nogl{height:auto;touch-action:auto}
+.stage.nogl .hint,.stage.nogl .camctl,.stage.nogl .loading{display:none}
+.stage.nogl{overflow-y:auto;touch-action:pan-y;-webkit-user-select:auto;user-select:auto}
 .tip{position:absolute;z-index:8;pointer-events:none;max-width:240px;background:#fff;border:2px solid var(--ink);border-radius:10px;padding:5px 9px;font-size:12px;font-weight:600;line-height:1.3;box-shadow:3px 3px 0 rgba(26,22,18,.15)}
 .tip[hidden]{display:none}
 .tip small{display:block;color:var(--muted);font-weight:700;font-size:10.5px;margin-top:2px}
@@ -122,7 +137,7 @@ main{padding:18px clamp(14px,3vw,32px) 40px}
 }
 
 /* fallback (no WebGL) */
-.fallback{padding:16px}
+.fallback{padding:16px 16px calc(var(--sheet-vis) + 24px)}
 .fallback .fbmsg{background:#fff;border:2px solid var(--crimson);border-radius:12px;padding:10px 14px;margin:24px 0 14px;font-size:14px}
 .fbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .fbcard{text-align:left;background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:10px 12px;cursor:pointer;box-shadow:3px 4px 0 rgba(26,22,18,.15);display:flex;flex-direction:column;gap:3px;position:relative}
@@ -135,15 +150,51 @@ main{padding:18px clamp(14px,3vw,32px) 40px}
 .fbcard .alert{position:absolute;top:-10px;right:10px;width:26px;height:26px;border-radius:50%;background:var(--crimson);color:#fff;display:grid;place-items:center;font:900 15px/1 var(--round);border:2px solid #fff}
 .fbcard.zen{border-style:dashed;background:#fff7f0}
 
-/* ---------- needs panel ---------- */
-.needs{position:sticky;top:70px;background:#fff;border:2px solid var(--ink);border-radius:20px;box-shadow:5px 6px 0 rgba(153,15,61,.25);overflow:hidden}
-@media (max-width:1080px){.needs{position:static}}
-.needs header{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--crimson);color:#fff}
-.bigbadge{min-width:58px;height:58px;padding:0 10px;border-radius:16px;background:#fff;color:var(--crimson);display:grid;place-items:center;font:900 34px/1 var(--round);box-shadow:inset 0 -3px 0 rgba(0,0,0,.12)}
-.needs h2{margin:0;font-family:var(--round);font-size:20px}
-.needs header p{margin:2px 0 0;font-size:12.5px;opacity:.9}
-.qlist{list-style:none;margin:0;padding:10px;display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 230px);overflow:auto}
-@media (max-width:1080px){.qlist{max-height:none}}
+/* ---------- the sheet: "Needs you", org chart and owners over the office ----------
+   Phones: a bottom sheet whose visible height is --sheet-vis (peek · half · full, dragged by its header).
+   Wide or landscape screens: a docked side panel. */
+.dock{position:absolute;left:0;right:0;bottom:0;z-index:20;height:calc(100% - 8px);display:flex;flex-direction:column;background:var(--paper);border-top:2px solid var(--ink);border-radius:20px 20px 0 0;box-shadow:0 -10px 28px -14px rgba(26,22,18,.45);transform:translateY(calc(100% - var(--sheet-vis)));transition:transform .32s cubic-bezier(.2,.8,.2,1);will-change:transform}
+#app.dragging .dock{transition:none}
+.sheethead{flex:none;padding:6px 12px;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.grab{width:42px;height:5px;border-radius:3px;background:rgba(26,22,18,.28);margin:0 auto 4px}
+.sheetsum{width:100%;min-height:56px;display:flex;align-items:center;gap:12px;background:none;border:0;border-radius:12px;padding:2px;text-align:left;cursor:pointer;color:var(--ink)}
+.bigbadge{min-width:46px;height:46px;padding:0 8px;border-radius:14px;background:var(--crimson);color:#fff;display:grid;place-items:center;font:900 24px/1 var(--round);box-shadow:inset 0 -3px 0 rgba(0,0,0,.2);flex:none}
+.sheetsum.clear .bigbadge{background:var(--green)}
+.sumtext{min-width:0;flex:1}
+.sumtext b{display:block;font-family:var(--round);font-size:18px;line-height:1.15}
+.sumtext small{display:block;font-size:12.5px;color:var(--ink2);margin-top:1px}
+.chev{width:36px;height:36px;border-radius:50%;border:2px solid var(--ink);background:#fff;display:grid;place-items:center;flex:none;transition:transform .25s}
+.chev svg{width:18px;height:18px;fill:none;stroke:var(--ink);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.sheetsum[aria-expanded="true"] .chev{transform:rotate(180deg)}
+/* sideways swipes are refused and nothing in the sheet scrolls sideways, so a swipe can't take the browser back */
+.sheetbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y pinch-zoom;padding:0 12px calc(var(--hidden,0px) + 28px)}
+.dock .tabs{position:sticky;top:0;z-index:2;margin:0 0 10px;box-shadow:0 -6px 0 var(--paper)}
+.dock .tab{flex:1;padding:7px 6px;white-space:nowrap}
+.dock .chips{margin:0 0 8px}
+.dock .chip{padding:5px 7px;font-size:13px}
+.dock .chip .n{padding:0 6px}
+/* tables wrap to the panel's width: a sideways-scrolling table would let a swipe take the browser back */
+.dock .tablewrap{overflow-x:visible}
+.dock table{table-layout:fixed;width:100%}
+.dock th,.dock td{padding:7px 6px;overflow-wrap:anywhere}
+.dock th{position:static}
+.needsnote{margin:10px 2px 0;font-size:12.5px;color:var(--ink2)}
+.dock .toggle{margin:-4px 0 6px}
+.dock .org{padding:4px 0 10px}
+.dock .spec{border-top:0;padding-top:0;grid-template-columns:1fr}
+.dock .spec .onode::before{display:none}
+.dock .vline{height:16px}
+.dock .panel{padding:14px;box-shadow:none}
+@media (min-width:900px),(orientation:landscape) and (max-height:540px){
+  .stage{right:var(--side-w)}
+  .dock{top:0;left:auto;width:var(--side-w);height:auto;transform:none;transition:none;border-top:0;border-left:2px solid var(--ink);border-radius:0;box-shadow:none}
+  .sheethead{cursor:default;touch-action:auto;padding-top:10px}
+  .grab,.chev{display:none}
+  .sheetbody{padding-bottom:28px}
+  .syncbtn .lg{display:inline}
+}
+@media (orientation:landscape) and (max-height:540px){:root{--side-w:320px}.syncbtn .lg{display:none}}
+.qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .qcard{width:100%;text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;transition:border-color .15s,transform .15s}
 .qcard:hover{border-color:var(--ink);transform:translateX(-2px)}
 .qcard.over{border-left:5px solid var(--crimson)}
@@ -265,94 +316,83 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
 .pubwarn{display:block;color:var(--crimson);font-size:12px;margin-top:4px}
 .bub{position:absolute;left:0;top:0;z-index:5;background:#fff;border:2px solid var(--ink);border-radius:12px;padding:3px 9px;font-size:12px;font-weight:700;white-space:nowrap;pointer-events:none;transform:translate(-50%,-100%);box-shadow:2px 2px 0 rgba(26,22,18,.15)}
 .bub[hidden]{display:none}
-.needjump{display:none}
 .nextform input,.nextform textarea,select{font-size:16px}
 @media (max-width:640px){
-  header.top{padding-top:8px;padding-bottom:8px}
-  header.top .sources,#howBtn{display:none}
-  .asof{font-size:11px}
-  .bar{position:static;gap:8px;padding:8px 12px}
-  .tabs{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
-  .tab,.chip{white-space:nowrap}
-  .chips{flex-wrap:nowrap;overflow-x:auto;max-width:100%;padding-bottom:2px}
-  .toggle small{display:none}
-  .tab,.chip,.toggle,#syncBtn,.howbtn,.resetv,.x,.abtn,button,select{min-height:44px}
-  .needjump{display:inline-flex;align-items:center;min-height:44px;background:var(--crimson);color:#fff;border:0;border-radius:999px;padding:0 16px;font-weight:800}
-  .floorwrap{display:flex;flex-direction:column}
-  #needs{order:-1;scroll-margin-top:8px}
-  .qlist{max-height:46vh;overflow:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch}
-  .stage{height:56vh;touch-action:pan-y}
-  #gl canvas{touch-action:pan-y!important}
+  .tab,.chip,.toggle,.x,.abtn,button,select{min-height:44px}
   .tag3d{position:relative}.tag3d::after{content:"";position:absolute;inset:-13px -4px}
-  .legend{display:none}
 }
 </style>
 </head>
 <body>
-<header class="top">
+<header class="topbar">
   <div class="brand">
     <div class="logo" aria-hidden="true">
-      <svg width="28" height="28" viewBox="0 0 28 28"><rect x="5" y="9" width="18" height="13" rx="4" fill="#FFF1E5"/><circle cx="11" cy="15" r="2" fill="#1a1612"/><circle cx="17" cy="15" r="2" fill="#1a1612"/><rect x="13" y="3" width="2" height="6" fill="#FFF1E5"/><circle cx="14" cy="3" r="2.2" fill="#C89132"/></svg>
+      <svg width="22" height="22" viewBox="0 0 28 28"><rect x="5" y="9" width="18" height="13" rx="4" fill="#FFF1E5"/><circle cx="11" cy="15" r="2" fill="#1a1612"/><circle cx="17" cy="15" r="2" fill="#1a1612"/><rect x="13" y="3" width="2" height="6" fill="#FFF1E5"/><circle cx="14" cy="3" r="2.2" fill="#C89132"/></svg>
     </div>
-    <div>
+    <div class="brandtext">
       <h1>Gana Teguh</h1>
-      <div class="asof" id="asof"></div>
+      <div class="fresh" id="fresh"></div>
     </div>
   </div>
-  <div class="meta">
-    <div class="sources" id="sources"></div>
-    <div class="syncline"><span>Synced from <b>Jarvis</b> · <span id="builtAt"></span></span>
-      <button type="button" id="syncBtn" style="background:#990F3D;color:#fff;border:0;border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer;min-height:44px">⟳ Sync with Jarvis</button> <span id="syncStat" role="status" aria-live="polite" style="font-size:12px"></span>
-      <button class="howbtn" id="howBtn" type="button" aria-expanded="false" aria-controls="howPop">How sync works</button>
-      <div class="howpop" id="howPop" role="note" hidden>A change you make here becomes a public GitHub request (you confirm first; first names only). GitHub applies it to this office in about a minute, shown as “Waiting for Jarvis to confirm”. Jarvis copies it to his Tasks page, the source of truth, and rebuilds this board every hour. <b>Sync with Jarvis</b> stays on this page: it checks for a newer board and reloads by itself when one arrives.</div>
+  <div class="topacts">
+    <button type="button" class="syncbtn" id="syncBtn" aria-label="Sync with Jarvis">⟳ Sync<span class="lg"> with Jarvis</span></button>
+    <button type="button" class="infobtn" id="howBtn" aria-expanded="false" aria-controls="howPop" aria-label="About this board and how sync works">i</button>
+    <div class="howpop" id="howPop" role="note" hidden>
+      <p class="howfacts"><span id="asof"></span><span>Synced from <b>Jarvis</b> · <span id="builtAt"></span></span><span id="lastApplied"></span></p>
+      <p id="sources"></p>
+      <p>A change you make here becomes a public GitHub request (you confirm first; first names only). GitHub applies it to this office in about a minute, shown as “Waiting for Jarvis to confirm”. Jarvis copies it to his Tasks page, the source of truth, and rebuilds this board every hour. <b>Sync with Jarvis</b> stays on this page: it checks for a newer board and reloads by itself when one arrives.</p>
     </div>
   </div>
 </header>
-
-<div class="bar" role="toolbar" aria-label="View controls">
-  <div class="tabs" role="tablist">
-    <button class="tab" role="tab" data-tab="floor" aria-selected="true">Office floor</button>
-    <button class="tab" role="tab" data-tab="org" aria-selected="false">Who reports to whom</button>
-    <button class="tab" role="tab" data-tab="own" aria-selected="false">Who owns what (draft, not applied)</button>
-  </div>
-  <button type="button" class="needjump" id="needJump">Needs you</button>
-  <div class="chips" id="chips" aria-label="Filter"></div>
-  <button class="toggle" id="hideToggle" role="switch" aria-checked="false"><span class="switch" aria-hidden="true"></span><span><span id="hideLbl">First names only (default)</span><small id="hideSub">Switch on to hide client names fully as [CLIENT]</small></span></button>
-</div>
+<div class="syncstat" id="syncStat" role="status" aria-live="polite"></div>
 
 <main id="app">
-  <section class="view" id="view-floor">
-    <div class="floorwrap">
-      <div>
-        <div class="stage" id="stage" role="region" aria-label="3D office. Drag to turn, scroll or pinch to zoom, tap a desk to see that bot's tasks.">
-          <div id="gl" aria-hidden="true"></div>
-          <span class="floorlabel">The office</span>
-          <button class="resetv" id="resetView" type="button">Reset view</button>
-          <div class="loading" id="loading"><span>Setting up the office…</span></div>
-          <div class="fallback" id="fallback" hidden></div>
-          <div class="legend" aria-label="Sticky note colours"><b>Sticky notes:</b>
-            <span><i style="background:var(--n-need);outline:1.5px solid var(--crimson)"></i>Needs you</span>
-            <span><i style="background:var(--n-doing)"></i>Doing now</span>
-            <span><i style="background:var(--n-next)"></i>Up next</span>
-            <span><i style="background:var(--n-wait)"></i>Waiting on others</span>
-            <span><i style="background:var(--n-inbox)"></i>Inbox</span>
-          </div>
-          <div class="hint">Drag to turn · Scroll or pinch to zoom · Tap a desk</div>
-          <div class="tip" id="tip" hidden></div>
-        </div>
-        <details class="pile" id="pile"><summary id="pileSum"></summary><div class="donelist" id="donelist"></div></details>
+  <div class="stage" id="stage" role="region" tabindex="0" aria-label="Office">
+    <div id="gl" aria-hidden="true"></div>
+    <div class="loading" id="loading"><span>Setting up the office…</span></div>
+    <div class="fallback" id="fallback" hidden></div>
+    <div class="hint" id="hint" aria-hidden="true"></div>
+    <div class="camctl" id="camctl" role="group" aria-label="Camera" hidden>
+      <div class="camgrp"><button type="button" data-cam="home" aria-label="Show the whole office" title="Whole office"><svg viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5.5h4V20"/></svg></button></div>
+      <div class="camgrp"><button type="button" data-cam="left" aria-label="Rotate anticlockwise" title="Rotate anticlockwise"><svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5"/><path d="M3.5 3.5v5h5"/></svg></button><button type="button" data-cam="right" aria-label="Rotate clockwise" title="Rotate clockwise"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6l2.5 2.5"/><path d="M20.5 3.5v5h-5"/></svg></button></div>
+      <div class="camgrp"><button type="button" data-cam="out" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button type="button" data-cam="in" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    </div>
+    <div class="tip" id="tip" hidden></div>
+  </div>
+
+  <section class="dock" id="sheet" aria-labelledby="needsTitle">
+    <div class="sheethead" id="sheetHead">
+      <div class="grab" aria-hidden="true"></div>
+      <button type="button" class="sheetsum" id="sheetSum" aria-expanded="false" aria-controls="sheetBody">
+        <span class="bigbadge" id="needCount" aria-hidden="true">0</span>
+        <span class="sumtext"><b id="needsTitle">Needs you</b><small id="needsSub"></small></span>
+        <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></span>
+      </button>
+    </div>
+    <div class="sheetbody" id="sheetBody">
+      <div class="tabs" role="tablist" aria-label="Lists">
+        <button type="button" class="tab" role="tab" data-tab="floor" aria-selected="true">Needs you</button>
+        <button type="button" class="tab" role="tab" data-tab="org" aria-selected="false">Org chart</button>
+        <button type="button" class="tab" role="tab" data-tab="own" aria-selected="false">Owners (draft)</button>
       </div>
-      <aside class="needs" id="needs" aria-labelledby="needsTitle">
-        <header>
-          <div class="bigbadge" id="needCount">0</div>
-          <div><h2 id="needsTitle">Needs you</h2><p>Things only you can do, or that are late. Late ones first.</p></div>
-        </header>
+      <section class="view" id="view-floor" aria-label="Needs you">
+        <button type="button" class="toggle" id="hideToggle" role="switch" aria-checked="false"><span class="switch" aria-hidden="true"></span><span><span id="hideLbl">First names only (default)</span><small id="hideSub">Switch on to hide client names fully as [CLIENT]</small></span></button>
+        <div class="chips" id="chips" aria-label="Filter the office and this list"></div>
         <ul class="qlist" id="qlist"></ul>
-      </aside>
+        <p class="needsnote">These are things only you can do, or that are late. Late ones come first.</p>
+        <details class="pile" id="pile"><summary id="pileSum"></summary><div class="donelist" id="donelist"></div></details>
+        <div class="legend" aria-label="Sticky note colours on the desks"><b>Sticky notes on desks:</b>
+          <span><i style="background:var(--n-need);outline:1.5px solid var(--crimson)"></i>Needs you</span>
+          <span><i style="background:var(--n-doing)"></i>Doing now</span>
+          <span><i style="background:var(--n-next)"></i>Up next</span>
+          <span><i style="background:var(--n-wait)"></i>Waiting on others</span>
+          <span><i style="background:var(--n-inbox)"></i>Inbox</span>
+        </div>
+      </section>
+      <section class="view" id="view-org" hidden></section>
+      <section class="view" id="view-own" hidden></section>
     </div>
   </section>
-  <section class="view" id="view-org" hidden></section>
-  <section class="view" id="view-own" hidden></section>
 </main>
 
 <div class="scrim" id="scrim"></div>
@@ -514,7 +554,7 @@ function portrait(b){
 }
 
 /* ---------- state ---------- */
-var state = {filter:"all", tab:"floor", bot:null};
+var state = {filter:"all", tab:"floor", bot:null, covered:false};
 var FILTERS = [
   {id:"all", label:"All", test:function(t){return true;}},
   {id:"need", label:"Needs you", test:function(t){return !!t._why;}},
@@ -545,12 +585,19 @@ var KIND_ORDER = {need:0, doing:1, next:2, wait:3, inbox:4};
 /* ---------- header ---------- */
 document.getElementById("asof").textContent = "Data as of "+(asOf?fmt(asOf)+" "+asOf.slice(0,4):"?");
 document.getElementById("builtAt").textContent = (D.builtAt || "?") + (staleDays >= 2 ? " · board is "+staleDays+" days old" : "");
+/* one freshness line in the top bar; the full dates live in the (i) popover */
+(function(){
+  var el=document.getElementById("fresh"), m=String(D.builtAt||"").match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})/);
+  if(staleDays >= 2){ el.textContent="Board is "+staleDays+" days old"; el.classList.add("stale"); }
+  else if(m) el.textContent="Updated "+(m[1]===todayKL ? m[2] : fmt(m[1])+", "+m[2]);
+  else el.textContent=asOf ? "Data as of "+fmt(asOf) : "";
+})();
 (function(){
   var btn=document.getElementById("howBtn"), pop=document.getElementById("howPop");
   function set(on){ pop.hidden=!on; btn.setAttribute("aria-expanded", String(on)); }
   btn.addEventListener("click", function(e){ e.stopPropagation(); set(pop.hidden); });
   document.addEventListener("click", function(e){ if(!pop.hidden && !pop.contains(e.target)) set(false); });
-  document.addEventListener("keydown", function(e){ if(e.key==="Escape" && !pop.hidden){ set(false); btn.focus(); } });
+  document.addEventListener("keydown", function(e){ if(e.key==="Escape" && !pop.hidden){ e.stopImmediatePropagation(); set(false); btn.focus(); } });
 })();
 document.getElementById("sources").innerHTML =
   '<span class="src" title="'+esc((D.sources&&D.sources.tasks)||"")+'"><b>Tasks:</b> '+SRC_TASKS+'</span>';
@@ -579,6 +626,10 @@ function renderFloor(){
   var f = curFilter();
   var list = NEEDS.filter(function(t){return state.filter==="all"||state.filter==="need"||f.test(t);});
   document.getElementById("needCount").textContent = NEEDS.length;
+  var nLate = NEEDS.filter(function(t){return t._over;}).length;
+  document.getElementById("needsTitle").textContent = !NEEDS.length ? "Nothing needs you" : NEEDS.length===1 ? "1 thing needs you" : NEEDS.length+" things need you";
+  document.getElementById("needsSub").textContent = !NEEDS.length ? "All clear on Jarvis's board" : nLate ? nLate+" late · late ones first" : "None late";
+  document.getElementById("sheetSum").classList.toggle("clear", !NEEDS.length);
   document.getElementById("qlist").innerHTML = list.length ? list.map(function(t){
     var b = BY[t.botId];
     var why = t._why.map(function(w){return '<span class="why'+(w==="Late"?" red":"")+'">'+w+'</span>';}).join("");
@@ -866,15 +917,15 @@ var listeners = [];
 function renderChips(){
   document.getElementById("chips").innerHTML = FILTERS.map(function(f){
     var n = f.id==="all" ? TASKS.filter(isOpen).length : f.id==="need" ? NEEDS.length : TASKS.filter(f.test).length;
-    if(f.id==="need"){ var nj=document.getElementById("needJump"); if(nj) nj.textContent="Needs you ("+n+")"; }
     return '<button class="chip" data-filter="'+f.id+'" aria-pressed="'+(state.filter===f.id)+'">'+f.label+' <span class="n">'+n+'</span></button>';
   }).join("");
 }
+/* tabs live in the sheet; the long lists (org chart, owners) open it to full height */
 function setTab(tab){
   state.tab=tab;
   document.querySelectorAll(".tab").forEach(function(b){b.setAttribute("aria-selected", String(b.dataset.tab===tab));});
   ["floor","org","own"].forEach(function(v){document.getElementById("view-"+v).hidden = v!==tab;});
-  document.getElementById("chips").style.visibility = tab==="floor"?"visible":"hidden";
+  if(tab!=="floor") sheetSet("full");
   listeners.forEach(function(fn){fn("tab");});
 }
 function renderAll(){
@@ -884,12 +935,90 @@ function renderAll(){
 }
 function goZeno(){ if(window.simsDesk) return window.simsDesk(); trayZeno(); }
 window.trayZeno=function(){return trayZeno();};
-document.addEventListener("DOMContentLoaded",function(){ var nj=document.getElementById("needJump"); if(nj) nj.onclick=function(){ trayZeno(); }; });
+/* "Check tray": the Needs-you list, filtered to what needs Zeno, in the open sheet */
 function trayZeno(){
-  state.filter="need"; renderAll();
-  var q=document.getElementById("needs"), bar=document.querySelector(".bar"), off=(getComputedStyle(bar).position==="sticky"?bar.offsetHeight:0)+8;
-  var top=q.getBoundingClientRect().top; if(top<off||top>window.innerHeight*.6) window.scrollTo({top:window.scrollY+top-off,behavior:"smooth"});
+  state.filter="need"; renderAll(); setTab("floor");
+  if(sheetSnap==="peek") sheetSet("half");
+  sheetBody.scrollTop=0;
 }
+
+/* ---------- the sheet: bottom sheet on phones (peek · half · full), side panel on wide screens ---------- */
+var SIDE_MQ = window.matchMedia("(min-width:900px), (orientation:landscape) and (max-height:540px)");
+var appEl=document.getElementById("app"), sheetHead=document.getElementById("sheetHead"), sheetBody=document.getElementById("sheetBody"), sheetSum=document.getElementById("sheetSum");
+var sheetSnap="peek", sheetVis=0, sheetDrag=null, sheetDragEnd=0;
+function sheetMode(){ return SIDE_MQ.matches ? "side" : "bottom"; }
+/* visible height of the sheet at each snap: peek shows the header, half shows half the screen, full stops under the top bar */
+function sheetHeights(){
+  var H=appEl.clientHeight, peek=sheetHead.offsetHeight+2, full=Math.max(peek, H-8);
+  return {peek:peek, half:Math.max(peek, Math.min(full, Math.round(window.innerHeight*.5))), full:full};
+}
+function sheetShow(vis){
+  var hs=sheetHeights();
+  sheetVis=Math.max(hs.peek, Math.min(hs.full, vis));
+  appEl.style.setProperty("--sheet-vis", sheetVis+"px");
+  sheetBody.style.setProperty("--hidden", (hs.full-sheetVis)+"px");   /* so the end of the list can scroll into view */
+}
+function sheetSet(snap){
+  if(sheetMode()==="side") snap="side";
+  else if(snap==="side" || !snap) snap="peek";
+  sheetSnap=snap;
+  if(snap==="side"){ sheetVis=0; appEl.style.setProperty("--sheet-vis","0px"); sheetBody.style.setProperty("--hidden","0px"); }
+  else sheetShow(sheetHeights()[snap]);
+  sheetSum.setAttribute("aria-expanded", String(snap!=="peek"));
+  sheetBody.inert = snap==="peek";
+  appEl.classList.toggle("sheet-full", snap==="full");
+  state.covered = snap==="full";   /* the office is hidden: the 3D loop pauses */
+  listeners.forEach(function(fn){fn("sheet");});
+}
+sheetSum.addEventListener("click", function(){
+  if(Date.now()-sheetDragEnd < 350) return;
+  if(sheetSnap==="side"){ setTab("floor"); sheetBody.scrollTop=0; return; }
+  sheetSet(sheetSnap==="peek" ? "half" : "peek");
+});
+/* drag the sheet by its header; on release it settles on the nearest snap, thrown in the direction of the flick.
+   Moves and the release are followed on window, so a mouse that slips off the header can't leave a drag hanging.
+   While dragging, only transforms move (the sheet and the camera buttons); --sheet-vis is written once, on release. */
+var sheetEl=document.getElementById("sheet"), camBtns=document.getElementById("camctl");
+function sheetDragTo(d, vis){
+  sheetVis=Math.max(d.hs.peek, Math.min(d.hs.full, vis));
+  sheetEl.style.transform="translateY("+(d.hs.full-sheetVis)+"px)";
+  camBtns.style.transform="translateY("+(-sheetVis)+"px)";
+}
+function sheetMove(e){
+  var d=sheetDrag; if(!d || e.pointerId!==d.id) return;
+  if(!d.moved){
+    if(Math.abs(e.clientY-d.y0) < 6) return;
+    d.moved=true; d.hs=sheetHeights(); appEl.classList.add("dragging");
+    try{ sheetHead.setPointerCapture(e.pointerId); }catch(err){}
+  }
+  d.s.push([e.timeStamp, e.clientY]); if(d.s.length>6) d.s.shift();
+  sheetDragTo(d, d.vis0-(e.clientY-d.y0));
+}
+function sheetRelease(e){
+  var d=sheetDrag; if(!d || e.pointerId!==d.id) return;
+  sheetDrag=null; appEl.classList.remove("dragging");
+  window.removeEventListener("pointermove", sheetMove, true);
+  window.removeEventListener("pointerup", sheetRelease, true);
+  window.removeEventListener("pointercancel", sheetRelease, true);
+  if(!d.moved) return;
+  sheetDragEnd=Date.now();
+  var a=d.s[0], b=d.s[d.s.length-1], v=(b[0]-a[0])>0 ? (b[1]-a[1])/(b[0]-a[0]) : 0;   /* px per ms, + is down */
+  if(e.timeStamp-b[0] > 80) v=0;   /* the finger rested before letting go: no flick */
+  var aim=sheetVis-v*200, hs=d.hs, best="peek";
+  ["half","full"].forEach(function(k){ if(Math.abs(hs[k]-aim) < Math.abs(hs[best]-aim)) best=k; });
+  sheetEl.style.transform=""; camBtns.style.transform="";
+  sheetSet(best);
+}
+sheetHead.addEventListener("pointerdown", function(e){
+  if(sheetSnap==="side" || (e.pointerType==="mouse" && e.button!==0)) return;
+  if(sheetDrag && sheetDrag.id!==e.pointerId) return;   /* a second finger doesn't take over */
+  sheetDrag={id:e.pointerId, y0:e.clientY, vis0:sheetVis, moved:false, s:[[e.timeStamp, e.clientY]]};
+  window.addEventListener("pointermove", sheetMove, true);
+  window.addEventListener("pointerup", sheetRelease, true);
+  window.addEventListener("pointercancel", sheetRelease, true);
+});
+SIDE_MQ.addEventListener("change", function(){ sheetSet("peek"); });
+new ResizeObserver(function(){ if(!sheetDrag) sheetSet(sheetSnap); }).observe(appEl);
 
 var ready3d = false;
 function showFallback(msg){
@@ -917,7 +1046,7 @@ document.addEventListener("click", function(e){
   if((el = e.target.closest("[data-copy]"))){ var pr=pending[el.dataset.copy]; if(pr) copyText(reqSentence(pr), el); return; }
   if((el = e.target.closest("[data-task]"))){ e.stopPropagation(); openModal(el.dataset.task); return; }
   if((el = e.target.closest("[data-gobot]"))){ closeModal(); openDrawer(el.dataset.gobot); return; }
-  if((el = e.target.closest("[data-gotab]"))){ closeModal(); closeDrawer(); setTab(el.dataset.gotab); window.scrollTo(0,0); return; }
+  if((el = e.target.closest("[data-gotab]"))){ closeModal(); closeDrawer(); setTab(el.dataset.gotab); return; }
   if((el = e.target.closest("[data-zeno]"))){ goZeno(); return; }
   if((el = e.target.closest("[data-bot]"))){ openDrawer(el.dataset.bot); return; }
   if((el = e.target.closest("[data-filter]"))){ state.filter=el.dataset.filter; renderAll(); return; }
@@ -940,7 +1069,11 @@ document.getElementById("hideToggle").addEventListener("click", function(){
   if(state.modal && document.getElementById("modal").classList.contains("on")){ var f=lastFocus; openModal(state.modal); lastFocus=f; }
 });
 document.addEventListener("keydown", function(e){
-  if(e.key==="Escape"){ if(document.getElementById("modal").classList.contains("on")) closeModal(); else if(state.bot) closeDrawer(); }
+  if(e.key!=="Escape") return;
+  if(document.getElementById("modal").classList.contains("on")) closeModal();
+  else if(state.bot) closeDrawer();
+  else if(document.querySelector(".pie,.pc")) return;   /* the desk menu and Desk PC close themselves */
+  else if(sheetSnap==="half" || sheetSnap==="full"){ sheetSet("peek"); sheetSum.focus(); }
 });
 
 /* ---------- API for the 3D layer ---------- */
@@ -956,18 +1089,21 @@ window.BotOffice = {
   tagHTML:tagHTML, zenoTagHTML:zenoTagHTML,
   openDrawer:openDrawer, openModal:openModal, goZeno:goZeno,
   onChange:function(fn){listeners.push(fn);},
+  /* sheet state for the 3D layer: how much of the office it covers now, and at its smallest */
+  sheet:{get:function(){return sheetSnap;}, set:sheetSet, mode:sheetMode,
+    visible:function(){return sheetSnap==="side" ? 0 : sheetVis;},
+    peek:function(){return sheetSnap==="side" ? 0 : sheetHeights().peek;}},
   showFallback:showFallback,
   ready:function(){ ready3d=true; var l=document.getElementById("loading"); if(l) l.hidden=true; }
 };
 setTimeout(function(){ if(!ready3d) showFallback("The 3D office didn't load. It needs an internet connection to fetch the 3D library (Three.js). Here is the plain office list instead."); }, 15000);
 
-renderAll(); setTab("floor");
+renderAll(); setTab("floor"); sheetSet("peek");
 })();
 </script>
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const A = window.BotOffice;
 function glOK(){
@@ -1000,14 +1136,6 @@ function start(){
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 1.6, 0.5, 300);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = .08;
-  if(window.matchMedia("(max-width:640px)").matches){ controls.touches = {ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE}; renderer.domElement.style.touchAction = "pan-y"; const hn = document.querySelector(".hint"); if(hn) hn.textContent = "1 finger scrolls · 2 fingers turn & zoom · Tap a desk"; }
-  controls.minDistance = 8; controls.maxDistance = 60;
-  controls.minPolarAngle = .3; controls.maxPolarAngle = 1.22;
-  controls.minAzimuthAngle = -1.1; controls.maxAzimuthAngle = 1.2;
-  controls.screenSpacePanning = false;
-  controls.rotateSpeed = .7; controls.zoomSpeed = .9;
 
   /* ---------- lights ---------- */
   scene.add(new THREE.HemisphereLight(0xfff3e2, 0xb48a5e, 1.15));
@@ -1533,44 +1661,70 @@ function start(){
     }
   }
 
-  /* ---------- camera framing ---------- */
-  const HOME = new THREE.Vector3(0, 0, -.6);
-  function home(){
-    const asp = camera.aspect;
-    let d = 40; if(asp < 1.35) d = Math.min(78, 40 * 1.35/asp);
-    const pol = .9, az = asp < 1 ? .22 : .42;
-    camera.position.set(HOME.x + d*Math.sin(pol)*Math.sin(az), HOME.y + d*Math.cos(pol), HOME.z + d*Math.sin(pol)*Math.cos(az));
-    controls.target.copy(HOME);
-    controls.maxDistance = Math.max(56, d*1.3);
-    controls.update();
+  /* ---------- camera: MapControls-style rig (createMapCam, below) ---------- */
+  const camctl = document.getElementById('camctl'), hintEl = document.getElementById('hint');
+  let lastW = 0, lastH = 0, lastPeek = -1, hintTimer = 0, rects = null;
+  /* the office the user can see now, and the part the sheet and the camera buttons leave free (home framing, room
+     clamp); measured once per resize or sheet move, not on every camera update */
+  function stageRects(){
+    if(rects) return rects;
+    const r = stage.getBoundingClientRect(), below = A.sheet.peek() + camctl.offsetHeight + 18;
+    return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible())},
+                    free: {x:r.left + 8, y:r.top + 8, w:r.width - 16, h:Math.max(60, r.height - below - 8)}};
   }
-  const TMIN = new THREE.Vector3(-RX+2, 0, -RZ+2), TMAX = new THREE.Vector3(RX-2, 2, RZ-2);
-  controls.addEventListener('change', () => {
-    const before = controls.target.clone();
-    controls.target.clamp(TMIN, TMAX);
-    if(!before.equals(controls.target)) camera.position.add(controls.target.clone().sub(before));
+  const cam = createMapCam({
+    camera, el: stage, canvas: renderer.domElement, buttons: camctl, reduce,
+    room: {x0: -RX + 1.5, x1: RX - 1.5, z0: -RZ + 1.5, z1: RZ - 1.5},   // where the middle of the view may go
+    azMin: -1.1, azMax: 1.6,   // from front-left round to side-on: the tall back and left walls stay behind the view
+    homeTarget: [0, -.6], homeAzs: [.42, Math.PI/2],
+    fitPoints: [[-RX,0,RZ],[RX,0,RZ],[-RX,0,-RZ],[RX,0,-RZ],[-RX,1.9,-RZ],[RX,1.9,-RZ],[-RX,1.9,RZ],[10,2.45,-RZ+.4]],
+    viewRect: () => stageRects().view, freeRect: () => stageRects().free,
+    pick: (x, y) => pickAt(x, y),
+    onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.openDrawer(p.bot); else if(p.zeno) A.goZeno(); },
+    onUser: hideHint
   });
-  document.getElementById('resetView').addEventListener('click', home);
+  window.officeCam = cam;
+  camctl.hidden = false;
+  /* the gesture hint and the stage label match the device: fingers on touch screens, mouse and keys elsewhere */
+  const coarse = matchMedia('(pointer: coarse)');
+  function describe(){
+    hintEl.textContent = coarse.matches ? 'Drag to move · Pinch to zoom · Twist to turn · Double-tap to fly in'
+      : 'Drag to move · Right-drag to turn · Scroll to zoom · Double-click to fly in';
+    stage.setAttribute('aria-label', coarse.matches
+      ? '3D office. Drag with one finger to move around, pinch to zoom, twist two fingers to turn, double-tap to fly in. Tap a desk to see that bot’s tasks.'
+      : '3D office. Drag to move around, right-drag to turn, scroll to zoom, double-click to fly in; arrow keys move, plus and minus zoom. Click a desk to see that bot’s tasks.');
+  }
+  describe(); coarse.addEventListener('change', describe);
+  hintTimer = setTimeout(hideHint, 9000);
+  function hideHint(){
+    if(hintEl.classList.contains('gone')) return;
+    hintEl.classList.add('gone'); clearTimeout(hintTimer); setTimeout(measureObstacles, 600);
+  }
 
-  let lastW = 0, lastH = 0, homed = false;
   function resize(){
     const w = stage.clientWidth, h = stage.clientHeight;
     if(!w || !h || (w === lastW && h === lastH)) return;
     lastW = w; lastH = h;
     renderer.setSize(w, h, false);
     camera.aspect = w/h; camera.updateProjectionMatrix();
-    if(!homed){ home(); homed = true; }
+    rects = null; lastPeek = A.sheet.peek(); cam.resized();
     TAGS.forEach(L => { L.w = 0; });   // phone/desktop tag styles differ; re-measure lazily
     measureObstacles();
   }
-  /* fixed overlays on the stage that tags must not sit under */
-  let obstacles = [];
+  /* overlays tags must not sit under: the camera buttons, the hint, and the strip of office the sheet covers */
+  let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
-    obstacles = ['.floorlabel', '.resetv', '.legend', '.hint'].map(s => stage.querySelector(s)).filter(Boolean).map(el => {
+    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl].filter(Boolean).map(el => {
       const r = el.getBoundingClientRect();
       return {x:r.left-ox, y:r.top-oy, w:r.width, h:r.height};
     }).filter(r => r.w && r.h);
+    const v = A.sheet.visible(); if(v > 0) obstacles.push({x:0, y:sr.height - v, w:sr.width, h:v});
+  }
+  function sheetMoved(){
+    rects = null;
+    if(A.sheet.peek() !== lastPeek){ lastPeek = A.sheet.peek(); cam.resized(); }
+    measureObstacles(); clearTimeout(obsTimer); obsTimer = setTimeout(measureObstacles, 360);   // again once the buttons stop sliding
   }
 
   /* screen-space tag layout: project anchors, sort by priority (hovered, needs you, not dimmed, nearest),
@@ -1611,7 +1765,7 @@ function start(){
   new ResizeObserver(resize).observe(stage);
   resize();
 
-  A.onChange(kind => { if(kind === 'data') refresh(); else if(kind === 'tab') resize(); });
+  A.onChange(kind => { if(kind === 'data') refresh(); else if(kind === 'tab') resize(); else if(kind === 'sheet') sheetMoved(); });
   refresh();
 
   /* ---------- picking ---------- */
@@ -1623,17 +1777,11 @@ function start(){
     const hit = ray.intersectObjects(notePicks.concat(staticPicks), false)[0];
     return hit ? hit.object.userData.pick : null;
   }
-  let down = null, hoverId = null, moveQ = null;
+  /* taps come from the camera rig (onTap), so a drag never opens anything */
+  let hoverId = null, moveQ = null;
   const cvs = renderer.domElement;
-  cvs.addEventListener('pointerdown', e => { down = {x:e.clientX, y:e.clientY, t:performance.now()}; tip.hidden = true; });
-  cvs.addEventListener('pointerup', e => {
-    if(!down) return;
-    const moved = Math.hypot(e.clientX-down.x, e.clientY-down.y), dt = performance.now()-down.t; down = null;
-    if(moved > 6 || dt > 700) return;
-    const p = pickAt(e.clientX, e.clientY); if(!p) return;
-    if(p.task) A.openModal(p.task); else if(p.bot) A.openDrawer(p.bot); else if(p.zeno) A.goZeno();
-  });
-  cvs.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' && !down) moveQ = {x:e.clientX, y:e.clientY}; });
+  cvs.addEventListener('pointerdown', () => { tip.hidden = true; });
+  cvs.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' && !cam.dragging()) moveQ = {x:e.clientX, y:e.clientY}; });
   cvs.addEventListener('pointerleave', () => { moveQ = null; setHover(null); stage.classList.remove('hot'); tip.hidden = true; });
   function setHover(id){
     if(id === hoverId) return;
@@ -1732,12 +1880,12 @@ function start(){
   const alerts = DESKS.map(dk => dk.alert);
   function frame(){
     requestAnimationFrame(frame);
-    if(A.state.tab !== 'floor' || document.hidden) return;
+    if(A.state.covered || document.hidden) return;   // nothing to draw while the full sheet hides the office
     const t = clock.getElapsedTime();
     const _dt = Math.min(.05, t - (frame.lt || t)); frame.lt = t;
     zenoTick(t);
     if(!reduce) idleTick(t, _dt);
-    controls.update();
+    cam.update(performance.now());
     doHover();
     if(!reduce){
       DESKS.forEach(dk => {
@@ -1769,16 +1917,326 @@ function start(){
   A.ready();
 }
 
+/* ---------- camera rig: MapControls-style, made for touch ----------
+   The camera looks at a target on the floor from a distance and a compass angle, and tilts lower as it zooms in so
+   close-ups show faces. Every gesture is pinned to the floor: the spot under a finger stays under that finger.
+   Touch: one finger pans; two fingers pinch (zoom toward them), twist (turn) and pan; double-tap glides there.
+   Mouse: drag pans, right-drag turns and tilts, the wheel zooms toward the pointer, double-click glides.
+   Keys (office focused): arrows move, + and - zoom, Home shows the whole office. */
+function createMapCam(o){
+  const {camera, el, canvas} = o, room = o.room;
+  const s = {tx:0, tz:0, dist:40, az:0, tilt:0};
+  const lim = {minDist:6, maxDist:120, azMin:o.azMin, azMax:o.azMax};
+  const NEAR = 6, FAR = 40, POL_NEAR = 1.12, POL_FAR = .9;   // pitch from straight down: 0.9 rad far out, 1.12 close up
+  const TWIST_ON = .17, DOUBLE_MS = 300, TURN = Math.PI/4, TURN_MIN = Math.PI/18;   // 300ms: Android's double-tap timeout
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hitV = new THREE.Vector3(), pv = new THREE.Vector3();
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const ease = f => f < .5 ? 4*f*f*f : 1 - Math.pow(2 - 2*f, 3)/2;
+  const snap = () => ({tx:s.tx, tz:s.tz, dist:s.dist, az:s.az, tilt:s.tilt});
+  let home = null, atHome = true, anim = null, fling = null, lastT = 0, btnKey = '', fitting = false, cr = null;
+  const crect = () => cr || (cr = canvas.getBoundingClientRect());   // the canvas only moves on resize
+
+  function polar(){
+    const t = clamp(Math.log(s.dist/NEAR)/Math.log(FAR/NEAR), 0, 1);
+    return clamp(POL_NEAR + (POL_FAR - POL_NEAR)*t + s.tilt, .55, 1.25);
+  }
+  function limit(st){
+    st.dist = clamp(st.dist, lim.minDist, lim.maxDist); st.az = clamp(st.az, lim.azMin, lim.azMax); st.tilt = clamp(st.tilt, -.25, .2);
+    return st;
+  }
+  function place(){
+    limit(s);
+    const p = polar(), sp = Math.sin(p);
+    camera.position.set(s.tx + s.dist*sp*Math.sin(s.az), s.dist*Math.cos(p), s.tz + s.dist*sp*Math.cos(s.az));
+    camera.lookAt(s.tx, 0, s.tz);
+    camera.updateMatrixWorld();
+  }
+  /* the floor point in the middle of what you see (above the sheet at its smallest) never leaves the room */
+  function apply(){
+    place();
+    if(fitting) return;
+    const r = o.freeRect(), V = floorAt(r.x + r.w/2, r.y + r.h/2); if(!V) return;
+    const dx = clamp(V[0], room.x0, room.x1) - V[0], dz = clamp(V[1], room.z0, room.z1) - V[1];
+    if(dx || dz){ s.tx += dx; s.tz += dz; place(); }
+  }
+  /* screen point (client px) -> [x, z] on the floor; null above the horizon */
+  function floorAt(cx, cy){
+    const r = crect(); if(!r.width || !r.height) return null;
+    ndc.set((cx - r.left)/r.width*2 - 1, 1 - (cy - r.top)/r.height*2);
+    ray.setFromCamera(ndc, camera);
+    if(!ray.ray.intersectPlane(ground, hitV) || hitV.distanceTo(camera.position) > 500) return null;
+    return [hitV.x, hitV.z];
+  }
+  function project(x, y, z){
+    const r = crect(); pv.set(x, y, z).project(camera);
+    return [r.left + (pv.x + 1)/2*r.width, r.top + (1 - pv.y)/2*r.height, pv.z];
+  }
+  /* slide the target so floor point P sits under screen point (cx, cy): exact, because only the target moves */
+  function pin(P, cx, cy){
+    const H = floorAt(cx, cy); if(!H) return;
+    s.tx += P[0] - H[0]; s.tz += P[1] - H[1]; apply();
+  }
+  /* the state that puts floor point P at screen point `at`, with the zoom, angle and tilt of `end` */
+  function solve(end, P, at){
+    const keep = snap();
+    Object.assign(s, end); apply(); pin(P, at[0], at[1]);
+    const out = snap(); Object.assign(s, keep); apply();
+    return out;
+  }
+  const view = () => o.viewRect();
+  function centre(){ const v = view(); return [v.x + v.w/2, v.y + v.h/2]; }
+  function stop(){ anim = null; fling = null; }
+  function moved(){ atHome = false; if(o.onUser) o.onUser(); }
+
+  /* glide to `end`. The pivot P (a floor point) slides on screen from where it is now to where it ends, so zooms
+     and turns stay centred on it; a pivot that is off to the side or behind the camera falls back to a plain blend.
+     Reduced motion: cut straight to the end. */
+  function glide(end, ms, P){
+    stop(); end = limit(Object.assign(snap(), end));
+    if(o.reduce || !ms){ Object.assign(s, end); apply(); return; }
+    let a = null, b = null;
+    if(P){
+      const r = crect();
+      const ok = q => q[2] < 1 && Math.abs(q[0] - r.left - r.width/2) < r.width*1.5 && Math.abs(q[1] - r.top - r.height/2) < r.height*1.5;
+      a = project(P[0], 0, P[1]);
+      const keep = snap(); Object.assign(s, end); apply(); b = project(P[0], 0, P[1]); Object.assign(s, keep); apply();
+      if(!ok(a) || !ok(b)) a = b = null;
+    }
+    anim = {from:snap(), end, a, b, P, t0:performance.now(), ms};
+  }
+  function stepGlide(now){
+    const A = anim, k = Math.min(1, (now - A.t0)/A.ms), f = ease(k);
+    for(const key of ['dist', 'az', 'tilt']) s[key] = A.from[key] + (A.end[key] - A.from[key])*f;
+    if(A.a){ apply(); pin(A.P, A.a[0] + (A.b[0] - A.a[0])*f, A.a[1] + (A.b[1] - A.a[1])*f); }
+    else { s.tx = A.from.tx + (A.end.tx - A.from.tx)*f; s.tz = A.from.tz + (A.end.tz - A.from.tz)*f; apply(); }
+    if(k >= 1){ Object.assign(s, A.end); apply(); anim = null; }
+  }
+  /* a thrown pan keeps sliding and slows down; it stops at the room's edge */
+  function stepFling(dt){
+    const F = fling, k = Math.exp(-dt/300);
+    F.vx *= k; F.vy *= k; F.x += F.vx*dt; F.y += F.vy*dt;
+    const bx = s.tx, bz = s.tz; pin(F.P, F.x, F.y);
+    if(Math.hypot(F.vx, F.vy) < .02 || (bx === s.tx && bz === s.tz)) fling = null;
+  }
+
+  /* ---- buttons, keys, double-tap ---- */
+  function act(name){
+    if(name === 'home'){ goHome(); return; }
+    const c = centre(), P = floorAt(c[0], c[1]) || [s.tx, s.tz], end = snap();
+    moved();
+    if(name === 'in') end.dist = s.dist*.6;
+    else if(name === 'out') end.dist = s.dist/.6;
+    else if(name === 'left') end.az = s.az - TURN;
+    else if(name === 'right') end.az = s.az + TURN;
+    glide(solve(limit(end), P, c), name === 'in' || name === 'out' ? 340 : 420, P);
+  }
+  function goHome(){
+    if(!home) return;
+    if(o.onUser) o.onUser();
+    glide(home, 520, [home.tx, home.tz]); atHome = true;
+  }
+  function flyInAt(cx, cy){
+    const P = floorAt(cx, cy); if(!P) return;
+    moved();
+    const end = snap(); if(s.dist > lim.minDist*1.3) end.dist = Math.max(lim.minDist, s.dist*.5);
+    glide(solve(limit(end), P, centre()), 480, P);
+  }
+  if(o.buttons) o.buttons.addEventListener('click', e => {
+    const b = e.target.closest('[data-cam]');
+    if(b && b.getAttribute('aria-disabled') !== 'true') act(b.dataset.cam);
+  });
+  function syncButtons(){
+    if(!o.buttons) return;
+    /* a button is off when a press could no longer visibly zoom (5%) or turn (10 deg), so it never looks broken */
+    const k = [s.dist <= lim.minDist*1.05, s.dist >= lim.maxDist/1.05, s.az <= lim.azMin + TURN_MIN, s.az >= lim.azMax - TURN_MIN].join();
+    if(k === btnKey) return;
+    btnKey = k; const f = k.split(',');
+    ['in', 'out', 'left', 'right'].forEach((n, i) => o.buttons.querySelector('[data-cam="' + n + '"]').setAttribute('aria-disabled', f[i]));
+  }
+  el.addEventListener('keydown', e => {
+    if(e.target !== el || e.altKey || e.ctrlKey || e.metaKey) return;
+    const step = {ArrowLeft:[1, 0], ArrowRight:[-1, 0], ArrowUp:[0, 1], ArrowDown:[0, -1]}[e.key];
+    if(step){
+      const v = view(), c = centre(), P = floorAt(c[0], c[1]); if(!P) return;
+      e.preventDefault(); moved();
+      glide(solve(snap(), P, [c[0] + step[0]*v.w*.18, c[1] + step[1]*v.h*.18]), 220, P);
+    }
+    else if(e.key === '+' || e.key === '='){ e.preventDefault(); act('in'); }
+    else if(e.key === '-' || e.key === '_'){ e.preventDefault(); act('out'); }
+    else if(e.key === 'Home' || e.key === '0'){ e.preventDefault(); act('home'); }
+  });
+
+  /* ---- pointers: one finger pans; two pinch, twist and pan; a short touch that does not move is a tap ---- */
+  const ptrs = new Map();
+  let g = null, seq = null, track = [], tapTimer = 0, lastTap = null, second = false, lastType = '';
+  const skip = t => !!(t && t.closest && t.closest('.camctl, .fallback'));
+  function regroup(){   // re-base the gesture whenever a finger lands or lifts, so nothing jumps
+    const P = [...ptrs.values()];
+    if(P.length === 1){
+      const p = P[0];
+      g = {n:1, P:floorAt(p.x, p.y), live:seq.moved, turn:p.type === 'mouse' && p.btn === 2, x0:p.x, y0:p.y, az0:s.az, tilt0:s.tilt};
+      track = [[performance.now(), p.x, p.y]];
+    } else if(P.length >= 2){
+      const [a, b] = P;
+      g = {n:2, P:floorAt((a.x + b.x)/2, (a.y + b.y)/2), d0:Math.max(10, Math.hypot(b.x - a.x, b.y - a.y)),
+           ang0:Math.atan2(b.y - a.y, b.x - a.x), dist0:s.dist, az0:s.az, twist:false};
+    } else g = null;
+  }
+  function capture(id){ try{ el.setPointerCapture(id); }catch(err){} }
+  function begin(){
+    if(seq.cap) return;
+    seq.cap = true; seq.moved = true;
+    for(const id of ptrs.keys()) capture(id);
+    el.classList.add('panning'); moved();
+  }
+  el.addEventListener('pointerdown', e => {
+    if(skip(e.target) || ptrs.size >= 2) return;
+    if(e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+    const wasMoving = !!(anim || fling);   // a touch that stops a glide or a coasting pan only stops it: no tap, no click
+    stop(); lastType = e.pointerType;
+    if(!ptrs.size){
+      seq = {moved:false, multi:false, cap:false, stopper:wasMoving};
+      second = !!(lastTap && e.pointerType !== 'mouse' && performance.now() - lastTap.t < DOUBLE_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32);
+      if(second){ clearTimeout(tapTimer); lastTap = null; }
+    } else seq.multi = true;
+    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, t0:performance.now(), type:e.pointerType, btn:e.button, onCanvas:e.target === canvas});
+    if(seq.cap) capture(e.pointerId);
+    regroup();
+  });
+  el.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if(!p || !g) return;
+    p.x = e.clientX; p.y = e.clientY;
+    if(g.n === 1){
+      if(!g.live){
+        if(Math.hypot(p.x - p.x0, p.y - p.y0) < (p.type === 'mouse' ? 4 : 8)) return;
+        g.live = true; begin();
+      }
+      if(g.turn){
+        const az = g.az0 - (p.x - g.x0)*.006, tilt = g.tilt0 - (p.y - g.y0)*.004;
+        s.az = az; s.tilt = tilt; apply();
+        if(s.az !== az){ g.az0 = s.az; g.x0 = p.x; }   // at a limit: start again from here
+        if(s.tilt !== tilt){ g.tilt0 = s.tilt; g.y0 = p.y; }
+        return;
+      }
+      if(g.P) pin(g.P, p.x, p.y);
+      track.push([performance.now(), p.x, p.y]); if(track.length > 8) track.shift();
+      return;
+    }
+    begin();
+    const [a, b] = [...ptrs.values()];
+    const d = Math.max(10, Math.hypot(b.x - a.x, b.y - a.y)), ang = Math.atan2(b.y - a.y, b.x - a.x);
+    let da = Math.atan2(Math.sin(ang - g.ang0), Math.cos(ang - g.ang0));
+    if(!g.twist && Math.abs(da) > TWIST_ON){ g.twist = true; g.ang0 = ang; g.az0 = s.az; da = 0; }   // a twist only turns once it is clearly a twist
+    const want = g.dist0*g.d0/d, wantAz = g.az0 + da;
+    s.dist = want; if(g.twist) s.az = wantAz;
+    apply();
+    if(s.dist !== want){ g.dist0 = s.dist; g.d0 = d; }   // pinched past a zoom limit: start again from here
+    if(g.twist && s.az !== wantAz){ g.az0 = s.az; g.ang0 = ang; }
+    if(g.P) pin(g.P, (a.x + b.x)/2, (a.y + b.y)/2);
+  });
+  function release(e){
+    const p = ptrs.get(e.pointerId); if(!p) return;
+    ptrs.delete(e.pointerId);
+    if(ptrs.size){ regroup(); return; }
+    const G = g, S = seq; g = null; el.classList.remove('panning');
+    if(S.stopper && !S.moved && !S.multi) swallowUntil = performance.now() + 400;   // the click this tap makes (say, on a desk tag) is dropped
+    if(e.type === 'pointerup' && !S.moved && !S.multi && !S.stopper && G && !G.turn && p.onCanvas && performance.now() - p.t0 < 700){
+      const hit = o.pick(p.x, p.y);   // what is under the finger now, not after the double-tap wait
+      if(p.type === 'mouse') o.onTap(hit);
+      else if(second) flyInAt(p.x, p.y);
+      else {   // wait a moment: a second tap turns this into a double-tap
+        lastTap = {t:performance.now(), x:p.x, y:p.y};
+        clearTimeout(tapTimer); tapTimer = setTimeout(() => { lastTap = null; o.onTap(hit); }, DOUBLE_MS);
+      }
+    } else if(G && G.n === 1 && G.live && !G.turn && !o.reduce) throwPan(G);
+    second = false;
+  }
+  function throwPan(G){
+    const n = track.length, now = performance.now(); if(n < 2 || !G.P) return;
+    let i = n - 1; while(i > 0 && track[n-1][0] - track[i-1][0] < 100) i--;
+    const a = track[i], b = track[n-1], dt = b[0] - a[0];
+    if(now - b[0] > 50 || dt < 10) return;   // the finger rested before lifting: no throw
+    const vx = (b[1] - a[1])/dt, vy = (b[2] - a[2])/dt;
+    if(Math.hypot(vx, vy) > .3) fling = {P:G.P, x:b[1], y:b[2], vx, vy};
+  }
+  let swallowUntil = 0;
+  el.addEventListener('click', e => { if(performance.now() < swallowUntil){ swallowUntil = 0; e.stopPropagation(); e.preventDefault(); } }, true);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('dblclick', e => { if(e.target === canvas && lastType === 'mouse') flyInAt(e.clientX, e.clientY); });
+  el.addEventListener('wheel', e => {
+    if(skip(e.target)) return;
+    e.preventDefault(); stop(); moved();
+    const px = clamp(e.deltaY*(e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1), -400, 400);
+    const P = floorAt(e.clientX, e.clientY);
+    s.dist *= Math.exp(px*(e.ctrlKey ? .01 : .0018)); apply();   // ctrl+wheel is a trackpad pinch
+    if(P) pin(P, e.clientX, e.clientY);
+  }, {passive:false});
+  el.addEventListener('contextmenu', e => { if(!skip(e.target)) e.preventDefault(); });
+
+  /* home: the whole room fitted into the part of the office the sheet leaves free at its smallest; of the angles in
+     o.homeAzs (front-on, side-on) the one that shows the office biggest wins: side-on on a portrait phone */
+  function fit(){
+    const r = o.freeRect(); if(!(r.w > 20 && r.h > 20)) return null;
+    const keep = snap(), keepMax = lim.maxDist;
+    lim.maxDist = 1e4; fitting = true;
+    let best = null;
+    for(const az of o.homeAzs){
+      Object.assign(s, {tx:o.homeTarget[0], tz:o.homeTarget[1], az, tilt:0, dist:40});
+      for(let i = 0; i < 80; i++){
+        apply();
+        let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+        for(const q of o.fitPoints){ const p = project(q[0], q[1], q[2]); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+        const P = floorAt((x0 + x1)/2, (y0 + y1)/2); if(P) pin(P, r.x + r.w/2, r.y + r.h/2);
+        const k = Math.max((x1 - x0)/r.w, (y1 - y0)/r.h);
+        if(Math.abs(k - 1) < 5e-4) break;
+        s.dist *= Math.pow(k, .8);
+      }
+      if(!best || s.dist < best.dist - .01) best = snap();
+    }
+    lim.maxDist = keepMax; fitting = false; Object.assign(s, keep); apply();
+    return best;
+  }
+  function resized(){
+    cr = null;
+    const h = fit(); if(!h) return;
+    home = h; lim.maxDist = Math.max(home.dist*1.25, lim.minDist*2);
+    if(atHome){ stop(); Object.assign(s, home); }
+    apply();
+  }
+  function update(now){
+    const dt = Math.min(50, lastT ? now - lastT : 16); lastT = now;
+    if(anim) stepGlide(now); else if(fling) stepFling(dt);
+    syncButtons();
+  }
+
+  return {
+    update, resized, floorAt, project,
+    flyTo(to, ms){
+      const end = snap();
+      if(to.x != null) end.tx = to.x; if(to.z != null) end.tz = to.z;
+      ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; });
+      limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
+    },
+    home: goHome,
+    state(){ return Object.assign(snap(), {polar:polar(), minDist:lim.minDist, maxDist:lim.maxDist, azMin:lim.azMin, azMax:lim.azMax, home:home && Object.assign({}, home)}); },
+    busy(){ return !!(anim || fling || ptrs.size); },
+    dragging(){ return ptrs.size > 0; }
+  };
+}
+
 </script>
 <script>
 /* ---------- Sync button: stays on this page, checks for a newer board, reloads when it lands ---------- */
 (function(){
   var RUNS="https://api.github.com/repos/adezeno/bot-office/actions/workflows/sync.yml/runs?per_page=6";
   var RUN_PAGE="https://github.com/adezeno/bot-office/actions/workflows/sync.yml";
-  var btn=document.getElementById("syncBtn"), st=document.getElementById("syncStat"), timer=null, tries=0;
+  var btn=document.getElementById("syncBtn"), st=document.getElementById("syncStat"), la=document.getElementById("lastApplied"), timer=null, tries=0, hideT=null;
   function stamp(d){ return (d&&d.builtAt||"")+"|"+((d&&d.officeChanges&&d.officeChanges.at)||""); }
   var mine=null;
-  function show(t,c){ st.textContent=t; st.style.color=c||""; }
+  /* status toast under the top bar; a final message clears itself */
+  function show(t,c,keep){ clearTimeout(hideT); st.textContent=t; st.style.color=c||""; if(!keep) hideT=setTimeout(function(){ st.textContent=""; },8000); }
   function kl(iso){ return new Date(iso).toLocaleString("en-GB",{timeZone:"Asia/Kuching",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})+" (UTC+8)"; }
   function readRemote(){
     return fetch("data.js?v="+Date.now(),{cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); }).then(function(txt){
@@ -1793,23 +2251,25 @@ function start(){
       try{ sessionStorage.setItem("gtRun",JSON.stringify({t:Date.now(),r:r})); }catch(e){}
       return r; });
   }
+  /* the last GitHub apply goes in the (i) popover, next to the other dates */
   function runLine(r){
-    if(!r) return;
-    if(r.status!=="completed") return show("Applying your requests now…");
-    if(r.conclusion==="success") show("Last applied: ✓ "+kl(r.at));
-    else if(r.conclusion==="failure"||r.conclusion==="timed_out"){ show("Last apply had a problem · ","#b3261e"); var a=document.createElement("a"); a.href=r.url; a.target="_blank"; a.rel="noopener"; a.textContent="details"; st.appendChild(a); }
+    if(!r || !la) return;
+    la.style.color="";
+    if(r.status!=="completed"){ la.textContent="Applying your requests now…"; return; }
+    if(r.conclusion==="success") la.textContent="Last applied: ✓ "+kl(r.at);
+    else if(r.conclusion==="failure"||r.conclusion==="timed_out"){ la.textContent="Last apply had a problem · "; la.style.color="#b3261e"; var a=document.createElement("a"); a.href=r.url; a.target="_blank"; a.rel="noopener"; a.textContent="details"; la.appendChild(a); }
   }
   function poll(){
     if(document.hidden){ timer=setTimeout(poll,5000); return; }
     readRemote().then(function(sv){
-      if(mine && sv!==mine){ show("✓ New board arrived. Reloading…","#1b7a3a"); setTimeout(function(){ location.reload(); },1200); return; }
-      if(++tries<10){ show("Checking for a newer board… ("+tries+"/9)"); timer=setTimeout(poll,20000); }
+      if(mine && sv!==mine){ show("✓ New board arrived. Reloading…","#1b7a3a",true); setTimeout(function(){ location.reload(); },1200); return; }
+      if(++tries<10){ show("Checking for a newer board… ("+tries+"/9)","",true); timer=setTimeout(poll,20000); }
       else show("Up to date. Requests apply within a minute; Jarvis rebuilds the board every hour.");
     }).catch(function(){ show("Couldn't reach the site. Try again shortly.","#b3261e"); });
   }
   btn.addEventListener("click",function(e){
     e.preventDefault(); clearTimeout(timer); tries=0;
-    show("Checking…");
+    show("Checking…","",true);
     readRemote().then(function(sv){ if(mine===null) mine=sv; poll(); }).catch(function(){ poll(); });
   });
   readRemote().then(function(sv){ mine=sv; }).catch(function(){});
