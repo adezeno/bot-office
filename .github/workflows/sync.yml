@@ -1,0 +1,34 @@
+name: Sync with Jarvis
+on:
+  workflow_dispatch:
+  issues:
+    types: [opened]
+permissions:
+  contents: write
+  issues: write
+concurrency: { group: sync, cancel-in-progress: false }  # runs one at a time
+jobs:
+  sync:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.labels.*.name, 'office-change')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply office-change requests to the board
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python3 tools/apply_changes.py "${{ github.repository }}" data.js
+      - name: Publish
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          git config user.name "bot-office-sync"; git config user.email "actions@users.noreply.github.com"
+          git add data.js
+          git diff --cached --quiet && { echo "No change"; exit 0; }
+          git commit -qm "Sync: apply office-change requests"
+          for i in 1 2 3; do
+            git push && exit 0
+            # someone pushed first: take their copy and re-apply all open requests (idempotent)
+            git fetch -q origin main && git reset -q --hard origin/main
+            python3 tools/apply_changes.py "${{ github.repository }}" data.js
+            git add data.js; git diff --cached --quiet && exit 0
+            git commit -qm "Sync: apply office-change requests"
+          done
+          exit 1

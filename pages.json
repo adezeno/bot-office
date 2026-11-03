@@ -1,0 +1,79 @@
+{
+ "pages": [
+  {
+   "icon": "✅",
+   "name": "Jarvis · Tasks",
+   "group": "Task board (source of truth)"
+  },
+  {
+   "icon": "🛡️",
+   "name": "Prudential pilot",
+   "group": "Insurance"
+  },
+  {
+   "icon": "🖤",
+   "name": "Insurance Black Card",
+   "group": "Insurance"
+  },
+  {
+   "icon": "📋",
+   "name": "Policyholder dashboard",
+   "group": "Insurance"
+  },
+  {
+   "icon": "❤️",
+   "name": "Life & Medical book",
+   "group": "Clients"
+  },
+  {
+   "icon": "📈",
+   "name": "Eastspring client book",
+   "group": "Unit trust"
+  },
+  {
+   "icon": "💼",
+   "name": "Portfolio analysis",
+   "group": "Unit trust"
+  },
+  {
+   "icon": "🌏",
+   "name": "Market dashboard",
+   "group": "Markets"
+  },
+  {
+   "icon": "🔭",
+   "name": "Big Picture Outlook",
+   "group": "Markets"
+  },
+  {
+   "icon": "💰",
+   "name": "Zeno's Money",
+   "group": "Personal finance"
+  },
+  {
+   "icon": "🏋️",
+   "name": "Training",
+   "group": "Health"
+  },
+  {
+   "icon": "📰",
+   "name": "World Today",
+   "group": "News"
+  },
+  {
+   "icon": "📝",
+   "name": "Zeno's Notes",
+   "group": "Notes"
+  },
+  {
+   "icon": "🧠",
+   "name": "Second Brain",
+   "group": "Notes"
+  },
+  {
+   "icon": "💡",
+   "name": "Idea Map",
+   "group": "Notes"
+  }
+ ]
+}
