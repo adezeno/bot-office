@@ -188,7 +188,7 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 @media (min-width:900px),(orientation:landscape) and (max-height:540px){
   .stage{right:var(--side-w)}
   .dock{top:0;left:auto;width:var(--side-w);height:auto;transform:none;transition:none;border-top:0;border-left:2px solid var(--ink);border-radius:0;box-shadow:none}
-  .sheethead{cursor:default;touch-action:pan-y;padding-top:10px}   /* sideways swipes on the card's header stay with the page */
+  .sheethead{cursor:default;touch-action:pan-y pinch-zoom;padding-top:10px}   /* sideways swipes on the card's header stay with the page */
   .grab,.chev{display:none}
   .sheetbody{padding-bottom:28px}
   .syncbtn .lg{display:inline}
@@ -2187,10 +2187,10 @@ function start(){
     pendingFocus = null;
     const w = where(id); if(!w) return;
     const az = Math.max(-.95, Math.min(.95, cam.state().az));
-    cam.frame([w.x, w.z], Object.assign({dist:id === 'zeno' ? 13 : 10, az, tilt:0}, figure(id)), ms);   // Zeno stands, the team sits
+    cam.frame([w.x, w.z, w.y], Object.assign({dist:id === 'zeno' ? 13 : 10, az, tilt:0}, figure(id)), ms);   // Zeno stands, the team sits
   }
   function follow(id){
-    cam.follow(id ? () => { const w = where(id); return w && [w.x, w.z]; } : null, id && figure(id));
+    cam.follow(id ? () => { const w = where(id); return w && [w.x, w.z, w.y]; } : null, id && figure(id));
   }
   function mark(id){
     marked = id || null;
@@ -2283,7 +2283,7 @@ function createMapCam(o){
   const ease = f => f < .5 ? 4*f*f*f : 1 - Math.pow(2 - 2*f, 3)/2;
   const snap = () => ({tx:s.tx, tz:s.tz, dist:s.dist, az:s.az, tilt:s.tilt});
   let home = null, atHome = true, anim = null, fling = null, lastT = 0, btnKey = '', fitting = false, cr = null;
-  let follow = null, followFig = {};   // a getter for where the person the camera keeps in the middle stands: [x, z]
+  let follow = null, followFig = {};   // a getter for where the person the camera keeps in the middle stands: [x, z, y]
   const crect = () => cr || (cr = canvas.getBoundingClientRect());   // the canvas only moves on resize
 
   function polar(){
@@ -2369,13 +2369,13 @@ function createMapCam(o){
     else { s.tx = A.from.tx + (A.end.tx - A.from.tx)*f; s.tz = A.from.tz + (A.end.tz - A.from.tz)*f; apply(); }
     if(k >= 1){ Object.assign(s, A.end); apply(); anim = null; }
   }
-  /* a person standing on floor point P, as the camera sees them now: pixels from the feet up to the top of the figure
+  /* a person standing at P ([x, z, height of the feet]), as the camera sees them now: pixels from the feet up to the top of the figure
      (f.fig metres, plus f.pad pixels for the name chip) and down to the front of the ring on the floor (f.ring metres
      towards the camera) */
   function span(P, f){
-    const feet = project(P[0], 0, P[1])[1], r = f.ring || 0;
-    return [Math.max(0, feet - project(P[0], f.fig || 1.7, P[1])[1] + (f.pad || 0)),
-            Math.max(0, project(P[0] + r*Math.sin(s.az), 0, P[1] + r*Math.cos(s.az))[1] - feet)];
+    const y = P[2] || 0, feet = project(P[0], y, P[1])[1], r = f.ring || 0;
+    return [Math.max(0, feet - project(P[0], y + (f.fig || 1.7), P[1])[1] + (f.pad || 0)),
+            Math.max(0, project(P[0] + r*Math.sin(s.az), y, P[1] + r*Math.cos(s.az))[1] - feet)];
   }
   /* frame a person standing on floor point P: the middle of the figure lands in the middle of the office you can see
      (focusArea: between the top strip and the camera buttons, above the sheet), at the zoom and angle given. A figure
@@ -2387,7 +2387,8 @@ function createMapCam(o){
   function frame(P, to, ms){
     moved();
     to = to || {};
-    const end = limit(Object.assign(snap(), to)), a = focusArea(), c = [a.x, a.y], keep = snap();
+    const end = snap(), a = focusArea(), c = [a.x, a.y], keep = snap();
+    ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; }); limit(end);
     const fit = a.h - 2*FIT_GAP;   // the figure's whole height on screen that fits
     let at = c;
     for(let i = 0; i < 4; i++){
@@ -2405,7 +2406,7 @@ function createMapCam(o){
      wandered out of the middle. */
   function stepFollow(dt, now){
     const W = follow(); if(!W) return;
-    const a = focusArea(), c = [a.x, a.y], feet = project(W[0], 0, W[1]), [up, down] = span(W, followFig);
+    const a = focusArea(), c = [a.x, a.y], feet = project(W[0], W[2] || 0, W[1]), [up, down] = span(W, followFig);
     const at = [c[0], c[1] + (up - down)/2], H = floorAt(at[0], at[1]); if(!H) return;
     let dx = W[0] - H[0], dz = W[1] - H[1];
     if(!now){
@@ -2518,7 +2519,10 @@ function createMapCam(o){
       if(!g.live){
         if(Math.hypot(p.x - g.x0, p.y - g.y0) < (p.type === 'mouse' ? 4 : 8)) return;
         g.live = true; begin();
-        if(!g.turn) unfollow();   // a pan is the user taking the camera: follow ends; pinch and twist keep it
+        if(!g.turn){   // a pan is the user taking the camera: follow ends; pinch and twist keep it
+          if(follow) g.P = floorAt(g.x0, g.y0);   // the camera kept following while the finger rested: grab the floor under it now
+          unfollow();
+        }
       }
       if(g.turn){
         const az = g.az0 - (p.x - g.x0)*.006, tilt = g.tilt0 - (p.y - g.y0)*.004;
