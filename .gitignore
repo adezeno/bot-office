@@ -1,8 +1,7 @@
 __pycache__/
 # This repo is public and GitHub Pages serves all of it. Private files stay with Jarvis,
-# outside publish/, and are ignored here so `git add -A` in sync.sh can never pick them up.
+# outside publish/, and are ignored here so a stray copy can never be committed.
 private/
-names.json
 pages-with-links.json
 sanitize.py
 preview*.png

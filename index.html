@@ -732,7 +732,7 @@ function requestChange(t, action, value){
   var r = {taskId:t.id, action:action, value:value, asOf:asOf, requestedAt:new Date().toISOString()};
   if(applied(r,t)) return;  /* already true on the board, nothing to ask for */
   /* confirm step: this becomes a PUBLIC GitHub request */
-  if(!window.confirm("Send this to Jarvis as a PUBLIC GitHub request?\n\n"+reqSentence(r)+"\n\n(First names only; numbers are masked.) You still press Submit on GitHub.")) return;
+  if(!window.confirm("Send this to Jarvis as a PUBLIC GitHub request?\n\n"+reqSentence(r)+"\n\n(Numbers are masked. Use first names only.) You still press Submit on GitHub.")) return;
   pending[t.id] = r; savePending();
   window.open(issueURL(r), "_blank", "noopener");
   refreshTaskViews(t.id);
@@ -1856,7 +1856,7 @@ function start(){
       var o=document.createElement("div");o.className="pc";o.setAttribute("role","dialog");o.setAttribute("aria-label","Your desk computer: dashboards");
       o.innerHTML='<div class="mon"><div class="scr"><div class="pcbar"><span style="font-size:22px">💻</span><b>Desk PC</b><small>'+new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kuching",hour:"2-digit",minute:"2-digit"})+' (UTC+8)</small><button class="x" type="button">Stand up ✕</button></div><div class="grid">'+
         APPS.map(function(a){return '<a class="app" target="_blank" rel="noopener" href="'+esc(a[2])+'"><span>'+a[0]+'</span><b>'+esc(a[1])+'</b><i>'+esc(a[3])+'</i></a>';}).join("")+
-        '</div><h3 class="pghd">📄 My Pages</h3><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div><div class="note">🔒 Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div></div></div>';
+        '</div><h3 class="pghd">📄 My Pages</h3><div class="note" style="margin:0 0 10px">🔒 Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
       document.body.appendChild(o); window.zenoPC&&window.zenoPC(true);
       fetch("pages.json?v="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){
         var g=o.querySelector("#pcPages"); if(!g) return;
