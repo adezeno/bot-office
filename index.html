@@ -218,22 +218,70 @@ details.pile[open] summary::before{transform:rotate(90deg)}
 .done s{color:var(--ink)} .done small{display:block;color:var(--muted);margin-top:2px}
 .empty{font-size:12px;color:var(--ink2);font-style:italic;background:rgba(255,255,255,.6);padding:5px 8px;border-radius:8px;border:1px dashed var(--line)}
 
-/* ---------- drawer & modal ---------- */
+/* ---------- portrait bar: Zeno, then the team by urgency, at the top of the sheet ----------
+   One row that scrolls sideways under a finger (the header owns its touches, so a swipe never takes the browser
+   back). The ring says how things stand: gold Zeno, crimson needs you, green working, steel waiting, grey nothing open. */
+.pbar{position:relative;display:flex;gap:2px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;margin:0 -12px 2px;padding:4px 10px 2px;overscroll-behavior-x:contain}
+.pbar::-webkit-scrollbar{display:none}
+.pbar.more{-webkit-mask-image:linear-gradient(to right,#000 84%,transparent);mask-image:linear-gradient(to right,#000 84%,transparent)}
+.pb{flex:none;width:56px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 0 2px;background:none;border:0;border-radius:12px;cursor:pointer;color:var(--ink);-webkit-touch-callout:none}
+.pbface{position:relative;width:46px;height:46px;border-radius:50%;border:3px solid #b9ab9a;background:var(--wall,#fff);display:grid;place-items:center;transition:transform .15s}
+.pbface svg{width:40px;height:40px;border-radius:50%}
+.pb.idle .pbface{border-style:dashed}
+.pb.need .pbface,.cface.need{border-color:var(--crimson)}
+.pb.work .pbface,.cface.work{border-color:var(--green)}
+.pb.wait .pbface,.cface.wait{border-color:var(--steel)}
+.pb.zeno .pbface,.cface.zeno{border-color:var(--gold)}
+.cface.idle{border-style:dashed}
+.pb[aria-pressed="true"] .pbface{box-shadow:0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
+.pb.armed .pbface{transform:scale(1.12)}
+.pbbadge{position:absolute;top:-5px;right:-7px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--crimson);color:#fff;font:800 11px/16px var(--round);border:2px solid var(--paper);text-align:center}
+.pbname{max-width:56px;font-size:10.5px;font-weight:700;line-height:1.25;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb[aria-pressed="true"] .pbname{color:var(--ink)}
+.pb.dim{opacity:.45}
+/* the bot card: the selected person's header in the sheet, their card in its body */
+.sheetsum[hidden],.cardhead[hidden],.botcard[hidden],.dock .tabs[hidden]{display:none}
+.cardhead{display:flex;align-items:center;gap:6px;min-height:58px}
+.cardsum{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;border-radius:12px;padding:2px;text-align:left;cursor:pointer;color:var(--ink)}
+.cface{width:52px;height:52px;flex:none;border-radius:50%;border:3px solid #b9ab9a;background:var(--wall,#fff);display:grid;place-items:center}
+.cface svg{width:46px;height:46px;border-radius:50%}
+.cardtext{min-width:0;flex:1}
+.cardtext b{display:block;font-family:var(--round);font-size:17px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cardtext small{display:block;font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.followbtn{flex:none;min-height:40px;border:2px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);font-weight:700;font-size:13px;padding:0 12px;cursor:pointer}
+.followbtn[aria-pressed="true"]{background:var(--ink);color:#fff}
+.followbtn[hidden]{display:none}
+.cardhead .x{align-self:center;margin-left:0;width:40px;height:40px}
+.botcard{display:flex;flex-direction:column;gap:14px;padding-top:2px}
+.botcard h3{margin:0 0 7px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink2);display:flex;gap:8px;align-items:center}
+.botcard h3 .n{background:var(--ink);color:#fff;border-radius:999px;padding:0 7px;font-size:11px;letter-spacing:0}
+.cblurb{margin:0;font-size:13px;color:var(--ink2)}
+.cstats{margin:6px 0 0;font-size:12.5px;color:var(--ink2)}
+.cstats b{color:var(--ink)}
+.cnone{margin:0;font-size:13.5px;color:var(--ink2)}
+.cacts{display:flex;gap:8px;flex-wrap:wrap}
+.crow{display:block;width:100%;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;margin:0 0 7px;color:var(--ink)}
+.crow:hover{border-color:var(--ink)}
+.crow.over{border-left:5px solid var(--crimson)}
+.crow.static{cursor:default}
+.crow .tt{display:block;font-weight:700;font-size:14px;line-height:1.3}
+.crow .row{display:block;font-size:12.5px;color:var(--ink2);margin-top:3px}
+.crow .row b{color:var(--ink)}
+.cmore{margin:0;font-size:12.5px;color:var(--ink2)}
+details.cdone summary{cursor:pointer;padding:6px 0;font-weight:700;color:var(--ink2)}
+/* follow pill over the office, and the selected person's name chip */
+.followpill{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:7;display:inline-flex;align-items:center;gap:8px;min-height:40px;max-width:calc(100% - 24px);padding:0 5px 0 14px;border:2px solid var(--gold);border-radius:999px;background:var(--ink);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:3px 3px 0 rgba(26,22,18,.2);white-space:nowrap}
+.followpill[hidden]{display:none}
+.followpill .px{width:28px;height:28px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;font-size:14px;font-weight:800;flex:none}
+#app.sheet-full .followpill{visibility:hidden}
+.selchip{position:absolute;left:0;top:0;z-index:5;transform:translate(-50%,-100%);pointer-events:none;background:var(--ink);color:#fff;border:2px solid var(--gold);border-radius:999px;padding:1px 10px;font:800 12px/1.4 var(--round);white-space:nowrap;box-shadow:2px 2px 0 rgba(26,22,18,.2)}
+.selchip[hidden]{display:none}
+.lab3d.sel .tag3d{background:var(--ink);box-shadow:0 0 0 2px var(--gold),0 1px 4px rgba(26,22,18,.3)}
+
+/* ---------- modal ---------- */
 .scrim{position:fixed;inset:0;background:rgba(26,22,18,.38);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(470px,100vw);background:var(--paper);z-index:50;transform:translateX(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;border-left:2px solid var(--ink);box-shadow:-10px 0 30px rgba(0,0,0,.15)}
-.drawer.on{transform:none}
-.dhead{display:flex;gap:12px;align-items:center;padding:16px 18px;border-bottom:2px solid var(--ink);background:var(--wall,#fff)}
-.dhead svg{width:64px;height:64px;flex:none;border-radius:14px;background:#fff;border:2px solid var(--ink)}
-.dhead h2{margin:0;font-family:var(--round);font-size:21px;line-height:1.1}
-.dhead p{margin:3px 0 0;font-size:13px;color:var(--ink2)}
 .x{margin-left:auto;align-self:flex-start;border:2px solid var(--ink);background:#fff;width:34px;height:34px;border-radius:10px;cursor:pointer;font-size:18px;font-weight:800;line-height:1;flex:none}
-.dbody{overflow:auto;padding:14px 18px 30px;display:flex;flex-direction:column;gap:16px}
-.group h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink2);display:flex;gap:8px;align-items:center}
-.group h3 .n{background:var(--ink);color:#fff;border-radius:999px;padding:0 7px;font-size:11px}
-.tcard{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;width:100%;text-align:left;display:block}
-.tcard:hover{border-color:var(--ink)}
-.tmain{display:block;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer}
 /* change requests: never saved here, sent to Jarvis as a GitHub issue */
 .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
 .field .acts{margin-top:0;padding-top:0;border-top:0}
@@ -247,9 +295,6 @@ details.pile[open] summary::before{transform:rotate(90deg)}
 .pchip{display:inline-block;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;background:#ffe2a8;color:#7a4b00;border:1px solid #e0a63a;white-space:nowrap}
 .pend a,.linkbtn{color:var(--steel);font-weight:700;font-size:12px}
 .linkbtn{background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
-.tcard .tt{font-weight:700;font-size:14.5px;line-height:1.3}
-.tcard .row{font-size:12.5px;color:var(--ink2);margin-top:4px}
-.tcard .row b{color:var(--ink)}
 .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .tag{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--paper3);color:var(--ink2)}
 .tag.red{background:#fde1e7;color:var(--crimson)} .tag.hi{background:#fff0cc;color:#8a5a00} .tag.id{background:#eef3f6;color:var(--steel);font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -358,18 +403,27 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
       <div class="camgrp"><button type="button" data-cam="out" aria-label="Zoom out" title="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button type="button" data-cam="in" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
     </div>
     <div class="tip" id="tip" hidden></div>
+    <button type="button" class="followpill" id="followPill" hidden><span id="followTxt"></span><span class="px" aria-hidden="true">✕</span></button>
   </div>
 
   <section class="dock" id="sheet" aria-labelledby="needsTitle">
     <div class="sheethead" id="sheetHead">
       <div class="grab" aria-hidden="true"></div>
+      <div class="pbar" id="pbar" role="group" aria-label="Zeno and the team. Tap to go there, tap again to follow, press and hold for all tasks."></div>
       <button type="button" class="sheetsum" id="sheetSum" aria-expanded="false" aria-controls="sheetBody">
         <span class="bigbadge" id="needCount" aria-hidden="true">0</span>
         <span class="sumtext"><b id="needsTitle">Needs you</b><small id="needsSub"></small></span>
         <span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></span>
       </button>
+      <div class="cardhead" id="cardHead" hidden>
+        <button type="button" class="cardsum" id="cardSum" aria-expanded="false" aria-controls="sheetBody"><span class="cface" id="cardFace" aria-hidden="true"></span><span class="cardtext"><b id="cardTitle"></b><small id="cardAct"></small></span></button>
+        <button type="button" class="followbtn" id="cardFollow" aria-pressed="false">Follow</button>
+        <button type="button" class="x" id="cardClose" aria-label="Close the card">×</button>
+      </div>
+      <div class="sr" id="selLive" aria-live="polite"></div>
     </div>
     <div class="sheetbody" id="sheetBody">
+      <section class="botcard" id="botCard" aria-labelledby="cardTitle" hidden></section>
       <div class="tabs" role="tablist" aria-label="Lists">
         <button type="button" class="tab" role="tab" data-tab="floor" aria-selected="true">Needs you</button>
         <button type="button" class="tab" role="tab" data-tab="org" aria-selected="false">Org chart</button>
@@ -396,7 +450,6 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
 </main>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dTitle"></aside>
 <div class="modal" id="modal" aria-hidden="true" role="dialog" aria-modal="true"><div class="mbox" id="mbox"></div></div>
 
 <script>document.write('<script src="data.js?v='+Date.now()+'"><\/script>');</script>
@@ -520,7 +573,7 @@ function whenText(t){
   return d || dl || "No date set";
 }
 
-/* ---------- 2D portraits (drawer header + org chart) ---------- */
+/* ---------- 2D portraits (portrait bar, bot card, org chart) ---------- */
 function accessory(b){
   switch(b.acc){
     case "turtleneck": return '<rect x="128" y="76" width="24" height="9" rx="4" fill="#1d1d24"/>';
@@ -532,6 +585,10 @@ function accessory(b){
     case "laurel": return '<g fill="#5c9a4a"><ellipse cx="125" cy="52" rx="5" ry="2.4" transform="rotate(-40 125 52)"/><ellipse cx="130" cy="47" rx="5" ry="2.4" transform="rotate(-20 130 47)"/><ellipse cx="155" cy="52" rx="5" ry="2.4" transform="rotate(40 155 52)"/><ellipse cx="150" cy="47" rx="5" ry="2.4" transform="rotate(20 150 47)"/></g>';
     case "cap": return '<path d="M123 56 a17 15 0 0 1 34 0 z" fill="#c8102e"/><path d="M150 55 h16 q2 3 -2 4 h-14 z" fill="#8f0b20"/><circle cx="140" cy="42" r="2" fill="#fff"/>';
     case "bun": return '<circle cx="140" cy="40" r="7" fill="'+b.hair+'"/>';
+    /* Zeno, as in the office: navy suit, gold tie, swept quiff, the green plumbob */
+    case "zeno": return '<path d="M137 79 h6 l-1 4 l3 15 l-5 5 l-5 -5 l3 -15 z" fill="#C89132"/><circle cx="127" cy="88" r="1.6" fill="#C89132"/>'+
+      '<path d="M124 53 q5 -13 21 -11 q10 2 12 10 q-9 -6 -19 -4 q-8 2 -14 5z" fill="'+b.hair+'"/>'+
+      '<path d="M140 34 l4.2 5 l-4.2 5 l-4.2 -5 z" fill="#7CFC8A" stroke="#2bd14a" stroke-width="1"/>';
   }
   return "";
 }
@@ -552,9 +609,11 @@ function character(b){
 function portrait(b){
   return '<svg viewBox="112 34 56 56" aria-hidden="true">'+character(b)+'</svg>';
 }
+/* Zeno in the portrait bar and on his card: his own look, never one of the bots */
+var ZENO = {id:"zeno", name:"Zeno", role:"Founder", blurb:"Founder · Gana Teguh", color:"#1f2a44", wall:"#f6ead6", skin:"#e8b98f", hair:"#14100c", acc:"zeno"};
 
 /* ---------- state ---------- */
-var state = {filter:"all", tab:"floor", bot:null, covered:false};
+var state = {filter:"all", tab:"floor", covered:false};
 var FILTERS = [
   {id:"all", label:"All", test:function(t){return true;}},
   {id:"need", label:"Needs you", test:function(t){return !!t._why;}},
@@ -817,72 +876,195 @@ function actsHTML(t){
       '<button type="submit" class="abtn">Send</button><small class="pubwarn">This becomes public. First names only, no numbers.</small></form>'+
   '</div>';
 }
-/* re-render whatever is showing this task, keeping focus on its request strip */
+/* re-render whatever is showing this task, keeping focus on its request strip in the task modal */
 function refreshTaskViews(id){
-  renderFloor();
-  if(state.bot) openDrawer(state.bot);
+  renderFloor(); renderBar();
+  if(sel) renderCard();
   var m=document.getElementById("modal");
   if(state.modal && m.classList.contains("on")){ var f=lastFocus; openModal(state.modal); lastFocus=f; }
-  var scope = m.classList.contains("on") ? m : document.getElementById("drawer");
-  var c = scope.querySelector('[data-copy="'+id+'"]'); if(c) c.focus();
+  var c = m.classList.contains("on") && m.querySelector('[data-copy="'+id+'"]'); if(c) c.focus();
 }
 
-/* ---------- drawer ---------- */
-function taskCard(t){
+/* ---------- people: Zeno first, then the team by urgency (needs you, working, waiting, nothing open) ---------- */
+var RANK = {need:0, work:1, wait:2, idle:3};
+function personState(id){
+  if(id==="zeno") return "zeno";
+  var c = counts(id); return c.need ? "need" : c.work ? "work" : c.wait ? "wait" : "idle";
+}
+function people(){
+  var team = BOTS.map(function(b, i){ var c = counts(b.id); return {id:b.id, state:personState(b.id), need:c.need, i:i}; });
+  team.sort(function(a, b){ return (RANK[a.state]-RANK[b.state]) || (b.need-a.need) || (a.i-b.i); });
+  return [{id:"zeno", state:"zeno", need:NEEDS.length}].concat(team.map(function(p){ return {id:p.id, state:p.state, need:p.need}; }));
+}
+function who(id){ return id==="zeno" ? ZENO : BY[id]; }
+function personLabel(id){
+  if(id==="zeno") return "Zeno · Founder: "+(NEEDS.length ? NEEDS.length+(NEEDS.length===1 ? " thing needs you" : " things need you") : "nothing needs you");
+  var c = counts(id); return label(BY[id])+": "+c.open+" open, "+c.need+(c.need===1 ? " needs you" : " need you");
+}
+
+/* ---------- portrait bar ---------- */
+var pbar = document.getElementById("pbar");
+function renderBar(){
+  var keep = pbar.scrollLeft, f = document.activeElement && document.activeElement.closest && document.activeElement.closest("#pbar .pb"), fid = f && f.dataset.pick;
+  pbar.innerHTML = people().map(function(p){
+    var b = who(p.id);
+    return '<button type="button" class="pb '+p.state+(p.id!=="zeno" && isDim(p.id) ? " dim" : "")+'" data-pick="'+p.id+'" aria-pressed="'+(sel===p.id)+'" aria-label="'+esc(personLabel(p.id))+'" style="--wall:'+b.wall+'">'+
+      '<span class="pbface">'+portrait(b)+(p.need ? '<span class="pbbadge" aria-hidden="true">'+p.need+'</span>' : '')+'</span>'+
+      '<span class="pbname" aria-hidden="true">'+esc(b.name)+'</span></button>';
+  }).join("");
+  pbar.scrollLeft = keep; barEdge();
+  if(fid){ var nb = pbar.querySelector('[data-pick="'+fid+'"]'); if(nb) nb.focus(); }
+}
+function markBar(){ pbar.querySelectorAll(".pb").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.pick===sel)); }); }
+function barEdge(){ pbar.classList.toggle("more", pbar.scrollLeft + pbar.clientWidth < pbar.scrollWidth - 4); }
+pbar.addEventListener("scroll", barEdge, {passive:true});
+/* bring a portrait fully into view (after a swipe or a tap in the office selected someone off the edge) */
+function revealPortrait(id){
+  var b = pbar.querySelector('[data-pick="'+id+'"]'); if(!b) return;
+  if(b.offsetLeft < pbar.scrollLeft + 8 || b.offsetLeft + b.offsetWidth > pbar.scrollLeft + pbar.clientWidth - 64)   /* off the edge or in its fade */
+    pbar.scrollLeft = b.offsetLeft - (pbar.clientWidth - b.offsetWidth)/2;
+}
+
+/* ---------- the bot card: the selected person, in the sheet over the live office ----------
+   Half height on open, so the person stays in view above it; full for the whole task list. Rows open the task modal,
+   which holds the change requests. Swipe sideways for the next person. */
+var sel = null, following = false, cardReturn = null, actTimer = 0;
+var cardHead=document.getElementById("cardHead"), cardSum=document.getElementById("cardSum"), cardTitle=document.getElementById("cardTitle"),
+    cardAct=document.getElementById("cardAct"), cardFace=document.getElementById("cardFace"), cardFollow=document.getElementById("cardFollow"),
+    botCard=document.getElementById("botCard"), followPill=document.getElementById("followPill"), selLive=document.getElementById("selLive");
+function rowHTML(t, withBot){
   var tags = '<span class="tag id">'+esc(t.id)+'</span>';
   if(t._over) tags += '<span class="tag red">Late</span>';
-  if(t._why && !t._over) tags += '<span class="tag red">Needs you</span>';
+  else if(t._why) tags += '<span class="tag red">Needs you</span>';
   if(t.priority==="high") tags += '<span class="tag hi">High priority</span>';
-  if(t.project) tags += '<span class="tag">'+T(t.project)+'</span>';
   tags += pendChip(t);
-  return '<div class="tcard"><button type="button" class="tmain" data-task="'+t._k+'"><div class="tt">'+T(t.title)+'</div>'+
-    '<div class="row">📅 '+T(whenText(t))+'</div>'+
-    (t.note?'<div class="row">'+T(t.note)+'</div>':"")+
-    (t.next && t.next!=="—"?'<div class="row"><b>Next step:</b> '+T(t.next)+'</div>':"")+
-    '<div class="tags">'+tags+'</div></button>'+pendHTML(t)+actsHTML(t)+'</div>';
+  return '<button type="button" class="crow'+(t._over?' over':'')+'" data-task="'+t._k+'"><span class="tt">'+T(t.title)+'</span>'+
+    '<span class="row">'+(withBot ? esc(label(BY[t.botId]))+' · ' : '📅 ')+T(whenText(t))+'</span>'+
+    (t.next && t.next!=="—" ? '<span class="row"><b>Next:</b> '+T(t.next)+'</span>' : '')+
+    '<span class="tags">'+tags+'</span></button>';
 }
-var openedAt=0;
-function openDrawer(id){ openedAt=Date.now();
-  var b = BY[id]; if(!b) return;
-  state.bot = id;
-  var all = tasksOf(id), c = counts(id), body = "";
-  if(!all.length){
-    body += '<div class="honest">No open tasks on Jarvis\'s board for '+esc(b.name)+'. Nothing has been made up to fill this space.</div>';
-  } else {
-    if(id==="steve") body += '<div class="honest" style="font-size:13px">No tasks for Steve on Jarvis\'s board. The item below comes from the '+SRC_ARENA+'.</div>';
-    else if(!c.open) body += '<div class="honest" style="font-size:13px">No open tasks on Jarvis\'s board for '+esc(b.name)+'. Only finished ones below.</div>';
+/* what the person is doing: from the 3D office when it runs, from the task data when it doesn't */
+function activityOf(id){
+  var a = A3() && A3().activity(id);
+  if(a) return a.icon+" "+a.text;
+  if(id==="zeno") return "📥 "+NEEDS.length+" in the tray";
+  var c = counts(id); return c.open ? "🗂️ At desk · "+c.open+" open" : "💤 At desk · no open tasks";
+}
+function A3(){ return window.BotOffice && window.BotOffice.scene; }
+function zenoCardHTML(){
+  var n = NEEDS.length, late = NEEDS.filter(function(t){return t._over;}).length;
+  return '<p class="cblurb">Founder · Gana Teguh. Everything that needs you lands in the tray on the desk.</p>'+
+    '<div class="cacts">'+(n ? '<button type="button" class="btn dark" data-seeall>See all '+n+'</button>' : '')+
+      '<button type="button" class="btn" data-sitpc>💻 Sit &amp; use computer</button></div>'+
+    '<div id="cardNeeds"><h3>Needs you <span class="n">'+n+'</span>'+(late ? '<span class="why red">'+late+' late</span>' : '')+'</h3>'+
+      (n ? NEEDS.slice(0,3).map(function(t){ return rowHTML(t, true); }).join("")+(n>3 ? '<p class="cmore">+'+(n-3)+' more in See all</p>' : '') : '<p class="cnone">Nothing needs you on Jarvis\'s board. 🎉</p>')+'</div>';
+}
+function botCardHTML(id){
+  var b = BY[id], all = tasksOf(id), c = counts(id), mine = NEEDS.filter(function(t){return t.botId===id;}), h = "";
+  h += '<div><p class="cblurb">'+esc(b.blurb)+'</p><p class="cstats"><b>'+c.open+'</b> open · <b>'+c.need+'</b> '+(c.need===1?'needs':'need')+' you'+(c.done?' · '+c.done+' done':'')+'</p></div>';
+  if(all.length) h += '<div class="cacts"><button type="button" class="btn dark" data-alltasks>All tasks ('+all.length+')</button></div>';
+  if(mine.length) h += '<div id="cardNeeds"><h3>Needs you <span class="n">'+mine.length+'</span></h3>'+mine.slice(0,3).map(function(t){ return rowHTML(t); }).join("")+
+    (mine.length>3 ? '<p class="cmore">+'+(mine.length-3)+' more in all tasks</p>' : '')+'</div>';
+  else h += '<div id="cardNeeds">'+(all.length ? '<p class="cnone">Nothing needs you from '+esc(b.name)+' right now.</p>' : '')+'</div>';
+  if(!all.length) h += '<div class="honest">No open tasks on Jarvis\'s board for '+esc(b.name)+'. Nothing has been made up to fill this space.</div>';
+  else {
+    var list = "";
+    if(id==="steve") list += '<p class="cnone">The item below comes from the '+SRC_ARENA+', not Jarvis\'s board.</p>';
+    else if(!c.open) list += '<p class="cnone">No open tasks on Jarvis\'s board for '+esc(b.name)+'. Only finished ones below.</p>';
     STAGES.forEach(function(s){
-      var g = all.filter(function(t){return t.stage===s;});
-      if(!g.length) return;
+      var g = all.filter(function(t){return t.stage===s;}); if(!g.length) return;
       g.sort(function(a,b){return (a._over?0:1)-(b._over?0:1) || ((a.due||"9")<(b.due||"9")?-1:1);});
-      var inner = '<h3>'+STAGE_LABEL[s]+' <span class="n">'+g.length+'</span></h3>'+g.map(taskCard).join("");
-      body += s==="Done" ? '<details class="group pile" style="margin:0"><summary>Done pile · '+g.length+'</summary>'+g.map(taskCard).join("")+'</details>' : '<div class="group">'+inner+'</div>';
+      var rows = g.map(function(t){ return rowHTML(t); }).join("");
+      list += s==="Done" ? '<details class="cdone"><summary>Done pile · '+g.length+'</summary>'+rows+'</details>' : '<div><h3>'+STAGE_LABEL[s]+' <span class="n">'+g.length+'</span></h3>'+rows+'</div>';
     });
     var odd = all.filter(function(t){return STAGES.indexOf(t.stage)<0;});
-    if(odd.length) body += '<div class="group"><h3>Other <span class="n">'+odd.length+'</span></h3>'+odd.map(taskCard).join("")+'</div>';
+    if(odd.length) list += '<div><h3>Other <span class="n">'+odd.length+'</span></h3>'+odd.map(function(t){ return rowHTML(t); }).join("")+'</div>';
+    h += '<div id="cardAll">'+list+'</div>';
   }
   var deals = (D.deals||[]).filter(function(d){return DEAL_MAP[d.side]===id;});
-  if(deals.length){
-    body += '<div class="group"><h3>Deals in progress <span class="n">'+deals.length+'</span></h3>'+deals.map(function(d){
-      return '<div class="tcard" style="cursor:default"><div class="tt">'+T(d.client)+' · '+T(d.product)+'</div><div class="row"><b>Stage:</b> '+esc(d.stage)+' · <b>Next:</b> '+T(d.next)+'</div><div class="tags"><span class="tag id">'+esc(d.id)+'</span>'+(d.taskId?'<span class="tag">Task '+esc(d.taskId)+'</span>':"")+'</div></div>';
-    }).join("")+'</div>';
-  }
-  body += '<div class="srcnote">Source: '+(id==="steve"?SRC_ARENA:SRC_TASKS)+' · data as of '+esc(asOf)+'. '+(id==="steve"?'Read-only.':'Actions send a request to Jarvis; nothing changes here until Jarvis\'s board does.')+'</div>';
-  var dr = document.getElementById("drawer");
-  dr.style.setProperty("--wall", b.wall);
-  dr.innerHTML = '<div class="dhead">'+portrait(b)+'<div><h2 id="dTitle">'+esc(label(b))+'</h2><p>'+esc(b.blurb)+'</p><p><b>'+c.open+'</b> open'+(c.need?' · <b style="color:var(--crimson)">'+c.need+' need you</b>':"")+(c.done?' · '+c.done+' done':"")+'</p></div><button class="x" data-close aria-label="Close">×</button></div><div class="dbody">'+body+'</div>';
-  dr.classList.add("on"); dr.setAttribute("aria-hidden","false");
-  document.getElementById("scrim").classList.add("on");
-  dr.querySelector(".x").focus();
+  if(deals.length) h += '<div><h3>Deals in progress <span class="n">'+deals.length+'</span></h3>'+deals.map(function(d){
+    return '<div class="crow static"><span class="tt">'+T(d.client)+' · '+T(d.product)+'</span><span class="row"><b>Stage:</b> '+esc(d.stage)+' · <b>Next:</b> '+T(d.next)+'</span>'+
+      '<span class="tags"><span class="tag id">'+esc(d.id)+'</span>'+(d.taskId?'<span class="tag">Task '+esc(d.taskId)+'</span>':'')+'</span></div>';
+  }).join("")+'</div>';
+  h += '<div class="srcnote">Source: '+(id==="steve"?SRC_ARENA:SRC_TASKS)+' · data as of '+esc(asOf)+'. '+(id==="steve"?'Read-only.':'Tap a task to see it or to ask Jarvis to change it.')+'</div>';
+  return h;
 }
-function closeDrawer(){
-  state.bot=null;
-  var dr=document.getElementById("drawer"); dr.classList.remove("on"); dr.setAttribute("aria-hidden","true");
-  if(!document.getElementById("modal").classList.contains("on")) document.getElementById("scrim").classList.remove("on");
+function renderCard(){
+  if(!sel) return;
+  var b = who(sel);
+  cardFace.className = "cface "+personState(sel); cardFace.style.setProperty("--wall", b.wall); cardFace.innerHTML = portrait(b);
+  cardTitle.textContent = sel==="zeno" ? "Zeno · Founder" : label(b);
+  cardAct.textContent = activityOf(sel);
+  cardFollow.hidden = !A3();
+  botCard.innerHTML = sel==="zeno" ? zenoCardHTML() : botCardHTML(sel);
+}
+/* the sheet shows either the Needs-you lists or the card */
+function cardMode(on){
+  document.getElementById("sheetSum").hidden = on;
+  cardHead.hidden = !on; botCard.hidden = !on;
+  document.querySelector(".dock .tabs").hidden = on;
+  ["floor","org","own"].forEach(function(v){ document.getElementById("view-"+v).hidden = on || v!==state.tab; });
+  document.getElementById("sheet").setAttribute("aria-labelledby", on ? "cardTitle" : "needsTitle");
+  clearInterval(actTimer); actTimer = 0;
+  if(on && A3()) actTimer = setInterval(function(){ if(sel){ var a = activityOf(sel); if(cardAct.textContent!==a) cardAct.textContent = a; } }, 600);
+}
+/* select a person: fly there (about 600 ms) and open their card at half height. The same person again: follow.
+   opts.list: open the whole task list (long-press, "+N" notes, "See all tasks"); opts.keep: keep the sheet's height (swipe) */
+function select(id, opts){
+  opts = opts || {};
+  if(id!=="zeno" && !BY[id]) return;
+  var again = sel===id, wasOpen = !!sel, inSheet = document.activeElement && document.activeElement.closest && document.activeElement.closest("#sheetBody, #modal");
+  if(!wasOpen) cardReturn = {snap:sheetSnap, tab:state.tab};
+  if(!again && following){ following = false; if(A3()) A3().follow(null); }   /* follow belongs to one person */
+  sel = id;
+  markBar(); renderCard(); cardMode(true); revealPortrait(id);
+  var snap = opts.list ? "full" : opts.keep ? sheetSnap : (again && sheetSnap!=="full") ? sheetSnap : "half";
+  sheetSet(snap);
+  if(again && !opts.list && !opts.keep) setFollow(true);
+  else if(A3()) A3().focus(id, snap==='full' ? 0 : undefined);
+  if(A3()) A3().mark(id);
+  syncFollow();
+  if(opts.list) requestAnimationFrame(function(){ var l = document.getElementById("cardAll"); if(l) l.scrollIntoView({block:"start"}); });
+  else sheetBody.scrollTop = 0;
+  if(inSheet) cardSum.focus();
+  selLive.textContent = cardTitle.textContent+". "+cardAct.textContent;
+}
+function deselect(){
+  if(!sel) return;
+  var was = sel, back = cardReturn || {snap:"peek", tab:state.tab}, inCard = document.activeElement && document.activeElement.closest && document.activeElement.closest("#cardHead, #botCard");
+  sel = null; cardReturn = null;
+  if(following){ following = false; if(A3()) A3().follow(null); }
+  state.tab = back.tab;
+  cardMode(false); markBar(); syncFollow();
+  document.querySelectorAll(".tab").forEach(function(b){b.setAttribute("aria-selected", String(b.dataset.tab===state.tab));});
+  if(A3()) A3().mark(null);
+  sheetSet(back.snap);
+  if(inCard){ var p = pbar.querySelector('[data-pick="'+was+'"]'); (p || sheetSum).focus(); }
+  selLive.textContent = "";
+}
+/* follow: the camera keeps the person in the middle while they walk; a pan, the pill or the button ends it */
+function setFollow(on){
+  on = !!(on && sel && A3());
+  following = on;
+  if(A3()) A3().follow(on ? sel : null);
+  if(on && sheetSnap==="full") sheetSet("half");
+  syncFollow();
+  if(on) selLive.textContent = "Following "+who(sel).name;
+}
+function followEnded(){ if(following){ following = false; syncFollow(); } }
+function syncFollow(){
+  followPill.hidden = !following;
+  if(following){ var n = who(sel).name; document.getElementById("followTxt").textContent = "Following "+n; followPill.setAttribute("aria-label", "Stop following "+n); }
+  cardFollow.setAttribute("aria-pressed", String(following)); cardFollow.textContent = following ? "Following" : "Follow";
+  listeners.forEach(function(fn){fn("follow");});
+}
+function step(dir){
+  var ids = people().map(function(p){return p.id;}), i = ids.indexOf(sel); if(i<0) return;
+  select(ids[(i+dir+ids.length)%ids.length], {keep:true});
 }
 
 /* ---------- modal ---------- */
-var lastFocus=null;
+var lastFocus=null, openedAt=0;
 function openModal(k){ openedAt=Date.now();
   var t = byKey(k); if(!t) return;
   state.modal = k;
@@ -908,7 +1090,7 @@ function openModal(k){ openedAt=Date.now();
 function closeModal(){
   var m=document.getElementById("modal"); if(!m.classList.contains("on")) return;
   m.classList.remove("on"); m.setAttribute("aria-hidden","true");
-  if(!state.bot) document.getElementById("scrim").classList.remove("on");
+  document.getElementById("scrim").classList.remove("on");
   if(lastFocus && lastFocus.focus) lastFocus.focus();
 }
 
@@ -929,14 +1111,15 @@ function setTab(tab){
   listeners.forEach(function(fn){fn("tab");});
 }
 function renderAll(){
-  renderChips(); renderFloor(); renderOrg(); renderOwn();
+  renderChips(); renderFloor(); renderOrg(); renderOwn(); renderBar();
   listeners.forEach(function(fn){fn("data");});
-  if(state.bot) openDrawer(state.bot);
+  if(sel) renderCard();
 }
 function goZeno(){ if(window.simsDesk) return window.simsDesk(); trayZeno(); }
 window.trayZeno=function(){return trayZeno();};
 /* "Check tray": the Needs-you list, filtered to what needs Zeno, in the open sheet */
 function trayZeno(){
+  deselect();
   state.filter="need"; renderAll(); setTab("floor");
   if(sheetSnap==="peek") sheetSet("half");
   sheetBody.scrollTop=0;
@@ -945,7 +1128,7 @@ function trayZeno(){
 /* ---------- the sheet: bottom sheet on phones (peek · half · full), side panel on wide screens ---------- */
 var SIDE_MQ = window.matchMedia("(min-width:900px), (orientation:landscape) and (max-height:540px)");
 var appEl=document.getElementById("app"), sheetHead=document.getElementById("sheetHead"), sheetBody=document.getElementById("sheetBody"), sheetSum=document.getElementById("sheetSum");
-var sheetSnap="peek", sheetVis=0, sheetDrag=null, sheetDragEnd=0;
+var sheetSnap="peek", sheetVis=0, sheetDragEnd=0;
 function sheetMode(){ return SIDE_MQ.matches ? "side" : "bottom"; }
 /* visible height of the sheet at each snap: peek shows the header, half shows half the screen, full stops under the top bar */
 function sheetHeights(){
@@ -964,7 +1147,7 @@ function sheetSet(snap){
   sheetSnap=snap;
   if(snap==="side"){ sheetVis=0; appEl.style.setProperty("--sheet-vis","0px"); sheetBody.style.setProperty("--hidden","0px"); }
   else sheetShow(sheetHeights()[snap]);
-  sheetSum.setAttribute("aria-expanded", String(snap!=="peek"));
+  sheetSum.setAttribute("aria-expanded", String(snap!=="peek")); cardSum.setAttribute("aria-expanded", String(snap!=="peek"));
   sheetBody.inert = snap==="peek";
   appEl.classList.toggle("sheet-full", snap==="full");
   state.covered = snap==="full";   /* the office is hidden: the 3D loop pauses */
@@ -975,50 +1158,107 @@ sheetSum.addEventListener("click", function(){
   if(sheetSnap==="side"){ setTab("floor"); sheetBody.scrollTop=0; return; }
   sheetSet(sheetSnap==="peek" ? "half" : "peek");
 });
-/* drag the sheet by its header; on release it settles on the nearest snap, thrown in the direction of the flick.
-   Moves and the release are followed on window, so a mouse that slips off the header can't leave a drag hanging.
-   While dragging, only transforms move (the sheet and the camera buttons); --sheet-vis is written once, on release. */
+cardSum.addEventListener("click", function(){
+  if(Date.now()-sheetDragEnd < 350) return;
+  if(sheetSnap==="side"){ sheetBody.scrollTop=0; return; }
+  sheetSet(sheetSnap==="peek" ? "half" : "peek");
+});
+/* a finger (or the mouse) on the sheet header moves 6px, then picks a lane. Up or down drags the sheet (phones);
+   sideways scrolls the portrait bar if it started there, or swipes the card to the next or previous person.
+   On release a dragged sheet settles on the nearest snap, thrown in the direction of the flick. Moves and the release
+   are followed on window, so a mouse that slips off the header can't leave a drag hanging. While dragging, only
+   transforms move (the sheet and the camera buttons); --sheet-vis is written once, on release.
+   A portrait held still for LONG ms opens that person's whole task list: it arms on a timer (the face grows) and is
+   decided on release by the events' own timestamps, so a busy page can't stretch a quick tap into a long-press. */
 var sheetEl=document.getElementById("sheet"), camBtns=document.getElementById("camctl");
+var hd=null, LONG=480, barAnim=0, REDUCE=window.matchMedia("(prefers-reduced-motion: reduce)");
 function sheetDragTo(d, vis){
   sheetVis=Math.max(d.hs.peek, Math.min(d.hs.full, vis));
   sheetEl.style.transform="translateY("+(d.hs.full-sheetVis)+"px)";
   camBtns.style.transform="translateY("+(-sheetVis)+"px)";
 }
-function sheetMove(e){
-  var d=sheetDrag; if(!d || e.pointerId!==d.id) return;
-  if(!d.moved){
-    if(Math.abs(e.clientY-d.y0) < 6) return;
-    d.moved=true; d.hs=sheetHeights(); appEl.classList.add("dragging");
-    try{ sheetHead.setPointerCapture(e.pointerId); }catch(err){}
+function disarm(d){ clearTimeout(d.timer); if(d.el) d.el.classList.remove("armed"); }
+function headMove(e){
+  var d=hd; if(!d || e.pointerId!==d.id) return;
+  var dx=e.clientX-d.x0, dy=e.clientY-d.y0;
+  d.s.push([e.timeStamp, e.clientX, e.clientY]); if(d.s.length>6) d.s.shift();
+  if(!d.kind){
+    if(Math.max(Math.abs(dx), Math.abs(dy)) < 6) return;
+    disarm(d);
+    d.kind = Math.abs(dy)>Math.abs(dx) ? (sheetSnap==="side" ? "none" : "sheet") : d.onBar ? "bar" : sel ? "swipe" : "none";
+    if(d.kind==="sheet"){ d.hs=sheetHeights(); appEl.classList.add("dragging"); }
+    if(d.kind!=="none"){ try{ sheetHead.setPointerCapture(e.pointerId); }catch(err){} }
   }
-  d.s.push([e.timeStamp, e.clientY]); if(d.s.length>6) d.s.shift();
-  sheetDragTo(d, d.vis0-(e.clientY-d.y0));
+  if(d.kind==="sheet") sheetDragTo(d, d.vis0-dy);
+  else if(d.kind==="bar") pbar.scrollLeft=d.sl0-dx;
 }
-function sheetRelease(e){
-  var d=sheetDrag; if(!d || e.pointerId!==d.id) return;
-  sheetDrag=null; appEl.classList.remove("dragging");
-  window.removeEventListener("pointermove", sheetMove, true);
-  window.removeEventListener("pointerup", sheetRelease, true);
-  window.removeEventListener("pointercancel", sheetRelease, true);
-  if(!d.moved) return;
+function headUp(e){
+  var d=hd; if(!d || e.pointerId!==d.id) return;
+  hd=null; disarm(d); appEl.classList.remove("dragging");
+  window.removeEventListener("pointermove", headMove, true);
+  window.removeEventListener("pointerup", headUp, true);
+  window.removeEventListener("pointercancel", headUp, true);
+  if(!d.kind){
+    if(e.type==="pointerup" && d.pick && e.timeStamp-d.t0 >= LONG){ sheetDragEnd=Date.now(); select(d.pick, {list:true}); }   /* its click is swallowed */
+    return;
+  }
   sheetDragEnd=Date.now();
-  var a=d.s[0], b=d.s[d.s.length-1], v=(b[0]-a[0])>0 ? (b[1]-a[1])/(b[0]-a[0]) : 0;   /* px per ms, + is down */
-  if(e.timeStamp-b[0] > 80) v=0;   /* the finger rested before letting go: no flick */
-  var aim=sheetVis-v*200, hs=d.hs, best="peek";
-  ["half","full"].forEach(function(k){ if(Math.abs(hs[k]-aim) < Math.abs(hs[best]-aim)) best=k; });
-  sheetEl.style.transform=""; camBtns.style.transform="";
-  sheetSet(best);
+  var a=d.s[0], b=d.s[d.s.length-1], dt=b[0]-a[0], rested=e.timeStamp-b[0] > 80;   /* the finger rested before letting go: no flick */
+  if(d.kind==="sheet"){
+    var v=dt>0 && !rested ? (b[2]-a[2])/dt : 0, aim=sheetVis-v*200, hs=d.hs, best="peek";   /* px per ms, + is down */
+    ["half","full"].forEach(function(k){ if(Math.abs(hs[k]-aim) < Math.abs(hs[best]-aim)) best=k; });
+    sheetEl.style.transform=""; camBtns.style.transform="";
+    sheetSet(best);
+  } else if(d.kind==="bar"){
+    var vx=dt>0 && !rested ? (b[1]-a[1])/dt : 0;
+    if(Math.abs(vx) > .3 && !REDUCE.matches) glideBar(-vx);
+  } else if(d.kind==="swipe" && Math.abs(e.clientX-d.x0) > 50) step(e.clientX < d.x0 ? 1 : -1);
+}
+/* a flicked bar keeps gliding and slows down */
+function glideBar(v){
+  cancelAnimationFrame(barAnim);
+  var last=performance.now();
+  barAnim=requestAnimationFrame(function tick(now){
+    var dt=Math.min(50, Math.max(0, now-last)); last=now; v*=Math.exp(-dt/260);
+    var was=pbar.scrollLeft; pbar.scrollLeft+=v*dt;
+    if(Math.abs(v) > .02 && pbar.scrollLeft!==was) barAnim=requestAnimationFrame(tick);
+  });
 }
 sheetHead.addEventListener("pointerdown", function(e){
-  if(sheetSnap==="side" || (e.pointerType==="mouse" && e.button!==0)) return;
-  if(sheetDrag && sheetDrag.id!==e.pointerId) return;   /* a second finger doesn't take over */
-  sheetDrag={id:e.pointerId, y0:e.clientY, vis0:sheetVis, moved:false, s:[[e.timeStamp, e.clientY]]};
-  window.addEventListener("pointermove", sheetMove, true);
-  window.addEventListener("pointerup", sheetRelease, true);
-  window.addEventListener("pointercancel", sheetRelease, true);
+  if(e.pointerType==="mouse" && e.button!==0) return;
+  if(hd && hd.id!==e.pointerId) return;   /* a second finger doesn't take over */
+  cancelAnimationFrame(barAnim);
+  var pb=e.target.closest && e.target.closest(".pb");
+  hd={id:e.pointerId, x0:e.clientX, y0:e.clientY, t0:e.timeStamp, kind:null, onBar:!!(e.target.closest && e.target.closest("#pbar")),
+      sl0:pbar.scrollLeft, vis0:sheetVis, s:[[e.timeStamp, e.clientX, e.clientY]], pick:pb ? pb.dataset.pick : null, el:pb};
+  if(pb) hd.timer=setTimeout(function(){ pb.classList.add("armed"); }, LONG);
+  window.addEventListener("pointermove", headMove, true);
+  window.addEventListener("pointerup", headUp, true);
+  window.addEventListener("pointercancel", headUp, true);
 });
-SIDE_MQ.addEventListener("change", function(){ sheetSet("peek"); });
-new ResizeObserver(function(){ if(!sheetDrag) sheetSet(sheetSnap); }).observe(appEl);
+pbar.addEventListener("click", function(e){
+  var b=e.target.closest(".pb"); if(!b) return;
+  e.stopPropagation();
+  if(Date.now()-sheetDragEnd < 350) return;
+  select(b.dataset.pick);
+});
+pbar.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+pbar.addEventListener("wheel", function(e){ if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){ pbar.scrollLeft+=e.deltaY; e.preventDefault(); } }, {passive:false});
+/* a sideways swipe on the card body moves to the next or previous person; up and down still scroll the card */
+var sw=null;
+sheetBody.addEventListener("pointerdown", function(e){ sw = sel && e.pointerType!=="mouse" ? {id:e.pointerId, x0:e.clientX, y0:e.clientY} : null; });
+sheetBody.addEventListener("pointerup", function(e){
+  var d=sw; sw=null; if(!d || e.pointerId!==d.id || !sel) return;
+  var dx=e.clientX-d.x0, dy=e.clientY-d.y0;
+  if(Math.abs(dx) > 60 && Math.abs(dx) > 1.6*Math.abs(dy)){ sheetDragEnd=Date.now(); step(dx < 0 ? 1 : -1); }
+});
+sheetBody.addEventListener("pointercancel", function(){ sw=null; });
+/* turning the phone moves the sheet between the bottom and the side; an open card stays open and re-frames its person */
+SIDE_MQ.addEventListener("change", function(){
+  sheetSet(sel ? "half" : "peek");
+  if(sel && A3()) requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(sel && A3()) A3().focus(sel, 0); }); });
+});
+new ResizeObserver(function(){ if(!hd || hd.kind!=="sheet") sheetSet(sheetSnap); }).observe(appEl);
 
 var ready3d = false;
 function showFallback(msg){
@@ -1034,8 +1274,15 @@ function showFallback(msg){
 
 document.addEventListener("click", function(e){
   var el;
-  if((el = e.target.closest("[data-close]"))){ if(el.closest("#modal")) closeModal(); else closeDrawer(); return; }
-  if(e.target.id==="scrim" || e.target.id==="modal"){ if(Date.now()-openedAt<500) return; if(document.getElementById("modal").classList.contains("on")) closeModal(); else closeDrawer(); return; }
+  if(e.target.closest && e.target.closest("#sheet") && Date.now()-sheetDragEnd < 350){ e.preventDefault(); return; }   // the click a sheet drag or swipe ends with
+  if((el = e.target.closest("[data-close]"))){ closeModal(); return; }
+  if(e.target.id==="scrim" || e.target.id==="modal"){ if(Date.now()-openedAt<500) return; closeModal(); return; }
+  if(e.target.closest("#cardClose")){ deselect(); return; }
+  if(e.target.closest("#cardFollow")){ setFollow(!following); return; }
+  if(e.target.closest("#followPill")){ setFollow(false); return; }
+  if(e.target.closest("[data-alltasks]")){ sheetSet("full"); requestAnimationFrame(function(){ var l=document.getElementById("cardAll"); if(l) l.scrollIntoView({block:"start"}); }); return; }
+  if(e.target.closest("[data-seeall]")){ trayZeno(); return; }
+  if(e.target.closest("[data-sitpc]")){ if(window.openDeskPC) window.openDeskPC(); return; }
   if((el = e.target.closest('[data-act="done"]'))){ requestChange(taskById(el.dataset.id), "done"); return; }
   if((el = e.target.closest('[data-act="nexttoggle"]'))){
     var fm = el.parentNode.querySelector(".nextform"), on = fm.hidden;
@@ -1045,10 +1292,10 @@ document.addEventListener("click", function(e){
   }
   if((el = e.target.closest("[data-copy]"))){ var pr=pending[el.dataset.copy]; if(pr) copyText(reqSentence(pr), el); return; }
   if((el = e.target.closest("[data-task]"))){ e.stopPropagation(); openModal(el.dataset.task); return; }
-  if((el = e.target.closest("[data-gobot]"))){ closeModal(); openDrawer(el.dataset.gobot); return; }
-  if((el = e.target.closest("[data-gotab]"))){ closeModal(); closeDrawer(); setTab(el.dataset.gotab); return; }
+  if((el = e.target.closest("[data-gobot]"))){ closeModal(); select(el.dataset.gobot, {list:true}); return; }
+  if((el = e.target.closest("[data-gotab]"))){ closeModal(); deselect(); setTab(el.dataset.gotab); return; }
   if((el = e.target.closest("[data-zeno]"))){ goZeno(); return; }
-  if((el = e.target.closest("[data-bot]"))){ openDrawer(el.dataset.bot); return; }
+  if((el = e.target.closest("[data-bot]"))){ select(el.dataset.bot); return; }
   if((el = e.target.closest("[data-filter]"))){ state.filter=el.dataset.filter; renderAll(); return; }
   if((el = e.target.closest(".tab"))){ setTab(el.dataset.tab); return; }
 });
@@ -1071,8 +1318,8 @@ document.getElementById("hideToggle").addEventListener("click", function(){
 document.addEventListener("keydown", function(e){
   if(e.key!=="Escape") return;
   if(document.getElementById("modal").classList.contains("on")) closeModal();
-  else if(state.bot) closeDrawer();
   else if(document.querySelector(".pie,.pc")) return;   /* the desk menu and Desk PC close themselves */
+  else if(sel) deselect();
   else if(sheetSnap==="half" || sheetSnap==="full"){ sheetSet("peek"); sheetSum.focus(); }
 });
 
@@ -1087,7 +1334,10 @@ window.BotOffice = {
   },
   tipHTML:function(k){var t=byKey(k); return t ? T(t.title)+'<small>'+esc(t.id)+' · '+esc(STAGE_LABEL[t.stage]||t.stage)+(t._why?' · needs you':'')+'</small>' : '';},
   tagHTML:tagHTML, zenoTagHTML:zenoTagHTML,
-  openDrawer:openDrawer, openModal:openModal, goZeno:goZeno,
+  openModal:openModal, goZeno:goZeno,
+  /* the selected person (portrait bar, bot card, follow): 'zeno' or a bot id */
+  select:select, deselect:deselect, selected:function(){return sel;}, people:people,
+  setFollow:setFollow, following:function(){return following;}, followEnded:followEnded,
   onChange:function(fn){listeners.push(fn);},
   /* sheet state for the 3D layer: how much of the office it covers now, and at its smallest */
   sheet:{get:function(){return sheetSnap;}, set:sheetSet, mode:sheetMode,
@@ -1098,7 +1348,9 @@ window.BotOffice = {
 };
 setTimeout(function(){ if(!ready3d) showFallback("The 3D office didn't load. It needs an internet connection to fetch the 3D library (Three.js). Here is the plain office list instead."); }, 15000);
 
-renderAll(); setTab("floor"); sheetSet("peek");
+/* the first placement doesn't slide: the sheet starts where it belongs */
+appEl.classList.add("dragging"); renderAll(); setTab("floor"); sheetSet("peek");
+requestAnimationFrame(function(){ requestAnimationFrame(function(){ appEl.classList.remove("dragging"); }); });
 })();
 </script>
 
@@ -1378,7 +1630,7 @@ function start(){
   function makeTag(parent, x, y, z){
     const el = document.createElement('div'); el.className = 'lab3d'; labels.appendChild(el);
     parent.updateMatrixWorld(true);
-    const L = {el, world: parent.localToWorld(new THREE.Vector3(x, y, z)), w:0, h:0, x:NaN, y:NaN, vis:false, hot:0, need:0, dim:0};
+    const L = {el, world: parent.localToWorld(new THREE.Vector3(x, y, z)), w:0, h:0, x:NaN, y:NaN, vis:false, hot:0, sel:0, need:0, dim:0};
     TAGS.push(L); return L;
   }
   function setTag(L, html){ L.el.innerHTML = html; L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
@@ -1470,7 +1722,7 @@ function start(){
     const ballG = ball(.045, '#ffffff', 0, .05, 0, scene, true, 1); ballG.visible = false;
     const crown = new THREE.Group(); head.add(crown); crown.position.y = .62;   // founder plumbob
     const pb = mesh(new THREE.OctahedronGeometry(.13, 0), mat('#7CFC8A', {emissive:'#2bd14a', emissiveIntensity:.6}), 0, 0, 0, crown, false); pb.scale.y = 1.7;
-    pickable(g, {zeno:true});
+    pickable(g, {person:'zeno'});   // Zeno himself is selected like the team; his desk keeps its menu
     return {g, legL, legR, armL, armR, body, putter, ballG, pb};
   })();
   const floorY = (x, z) => (x > FO.x0 && x < FO.x1 && z < FO.z1 && z > FO.z0) ? .12 : 0;
@@ -1632,7 +1884,7 @@ function start(){
     if(more > 0){
       const m = new THREE.Mesh(plusGeo, new THREE.MeshBasicMaterial({map:plusMap(more), transparent:true}));
       m.rotation.x = -Math.PI/2; m.position.set(cx + (mid+1)*.14 + .06, y0 + .015, z0);
-      m.userData.pick = {bot:desk.b.id};
+      m.userData.pick = {bot:desk.b.id, list:true};   // "+N more": the bot's full task list
       desk.notes.add(m); desk.noteMeshes.push(m);
     }
   }
@@ -1662,7 +1914,7 @@ function start(){
   }
 
   /* ---------- camera: MapControls-style rig (createMapCam, below) ---------- */
-  const camctl = document.getElementById('camctl'), hintEl = document.getElementById('hint');
+  const camctl = document.getElementById('camctl'), hintEl = document.getElementById('hint'), followPill = document.getElementById('followPill');
   let lastW = 0, lastH = 0, lastPeek = -1, hintTimer = 0, rects = null;
   /* the office the user can see now, and the part the sheet and the camera buttons leave free (home framing, room
      clamp); measured once per resize or sheet move, not on every camera update */
@@ -1678,10 +1930,10 @@ function start(){
     azMin: -1.1, azMax: 1.6,   // from front-left round to side-on: the tall back and left walls stay behind the view
     homeTarget: [0, -.6], homeAzs: [.42, Math.PI/2],
     fitPoints: [[-RX,0,RZ],[RX,0,RZ],[-RX,0,-RZ],[RX,0,-RZ],[-RX,1.9,-RZ],[RX,1.9,-RZ],[-RX,1.9,RZ],[10,2.45,-RZ+.4]],
-    viewRect: () => stageRects().view, freeRect: () => stageRects().free,
+    viewRect: () => stageRects().view, freeRect: () => stageRects().free, topInset: 56,
     pick: (x, y) => pickAt(x, y),
-    onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.openDrawer(p.bot); else if(p.zeno) A.goZeno(); },
-    onUser: hideHint
+    onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.select(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
+    onUser: hideHint, onUnfollow: () => A.followEnded()
   });
   window.officeCam = cam;
   camctl.hidden = false;
@@ -1715,7 +1967,7 @@ function start(){
   let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
-    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl].filter(Boolean).map(el => {
+    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill].filter(Boolean).map(el => {
       const r = el.getBoundingClientRect();
       return {x:r.left-ox, y:r.top-oy, w:r.width, h:r.height};
     }).filter(r => r.w && r.h);
@@ -1744,8 +1996,9 @@ function start(){
       L.depth = camera.position.distanceToSquared(L.world);
       items.push(L);
     });
-    items.sort((a, b) => (b.hot-a.hot) || (b.need-a.need) || (a.dim-b.dim) || (a.depth-b.depth));
+    items.sort((a, b) => (b.sel-a.sel) || (b.hot-a.hot) || (b.need-a.need) || (a.dim-b.dim) || (a.depth-b.depth));
     const rects = obstacles.slice();
+    if(chipBox) rects.push(chipBox);   // the selected person's name chip stays readable
     const hit = r => rects.some(o => r.x < o.x+o.w+GAP && r.x+r.w+GAP > o.x && r.y < o.y+o.h+GAP && r.y+r.h+GAP > o.y);
     items.forEach(L => {
       const s = L.h + GAP, tries = [[0,0],[0,s],[-L.w*.35,0],[L.w*.35,0],[0,-s],[0,2*s]];
@@ -1765,7 +2018,7 @@ function start(){
   new ResizeObserver(resize).observe(stage);
   resize();
 
-  A.onChange(kind => { if(kind === 'data') refresh(); else if(kind === 'tab') resize(); else if(kind === 'sheet') sheetMoved(); });
+  A.onChange(kind => { if(kind === 'data') refresh(); else if(kind === 'tab') resize(); else if(kind === 'sheet') sheetMoved(); else if(kind === 'follow') measureObstacles(); });
   refresh();
 
   /* ---------- picking ---------- */
@@ -1835,7 +2088,7 @@ function start(){
     walkers.push({dk, plan, pts, x: sx, z: sz, phase: 'out', timer: 0, meetWith});
   }
   function idleTick(t, dt){
-    const busy = document.querySelector('.drawer.on, .modal.on, .pc, .pie');
+    const busy = document.querySelector('.modal.on, .pc, .pie');
     if(!busy && t > nextIdle && walkers.length === 0){
       nextIdle = t + 14 + Math.random()*10;
       const pool = DESKS.filter(d => !d.working || IDLES[d.b.id]);
@@ -1875,6 +2128,84 @@ function start(){
     zTag.el.style.display = (smallScreen && window.zenoSeated && window.zenoSeated()) ? 'none' : '';
   }
 
+  /* ---------- selection: where each person is, what they are doing, a gold ring on the floor and a name chip ----------
+     The portrait bar, the bot card and follow mode (classic script) reach the scene through A.scene. */
+  const RING_Y = .04;
+  const selRing = new THREE.Group(); selRing.visible = false; scene.add(selRing);
+  {
+    const ringM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
+    const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .62, 48), ringM); ring.rotation.x = -Math.PI/2; selRing.add(ring);
+    const waveM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, transparent:true, opacity:.6, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
+    const wave = new THREE.Mesh(new THREE.RingGeometry(.62, .68, 48), waveM); wave.rotation.x = -Math.PI/2; selRing.add(wave);
+    selRing.userData.wave = wave;
+  }
+  const chip = document.createElement('div'); chip.className = 'selchip'; chip.hidden = true; labels.appendChild(chip);
+  let marked = null, chipBox = null;
+  const _p = new THREE.Vector3();
+  function deskOf(id){ return DESKS.find(d => d.b.id === id); }
+  function where(id){
+    if(id === 'zeno') return {x:ZC.g.position.x, y:ZC.g.position.y, z:ZC.g.position.z};
+    const dk = deskOf(id); if(!dk) return null;
+    dk.c.root.getWorldPosition(_p); return {x:_p.x, y:_p.y, z:_p.z};
+  }
+  const figure = id => id === 'zeno' ? 2.8 : 2.2;   // feet to the top of the name chip: what a close-up must fit
+  /* what the person is doing, read from the scene and the task data only: no invented moods */
+  const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
+  const ZENO_DOING = {sit:['🪑', 'At the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
+  function activity(id){
+    let a;
+    if(id === 'zeno'){
+      a = zs.mode === 'sit' && document.querySelector('.pc') ? ['💻', 'At the desk · using the computer'] : (ZENO_DOING[zs.mode] || ZENO_DOING.walk);
+    } else {
+      const dk = deskOf(id); if(!dk) return null;
+      const w = walkers.find(x => x.dk === dk), c = A.counts(id);
+      if(w && w.phase === 'back') a = ['🚶', 'Heading back to the desk'];
+      else if(w && w.phase === 'out' && w.plan.act === 'sofa') a = ['🚶', 'Off to the sofa'];
+      else if(w) a = ERRANDS[w.plan.act] || ['🚶', 'Away from the desk'];
+      else if(!c.open) a = ['💤', 'At desk · no open tasks'];
+      else if(dk.working) a = ['⌨️', 'At desk · typing'];
+      else if(c.wait) a = ['⏳', 'At desk · waiting on others'];
+      else a = ['📥', 'At desk · inbox to sort'];
+    }
+    return {icon:a[0], text:a[1]};
+  }
+  /* fly to a person (about 600 ms), turning to show faces: the side-on phone view turns to 0.95 rad */
+  function focus(id, ms){
+    const w = where(id); if(!w) return;
+    const az = Math.max(-.95, Math.min(.95, cam.state().az));
+    cam.frame([w.x, w.z], {dist:id === 'zeno' ? 13 : 10, az, tilt:0, fig:figure(id)}, ms);   // Zeno stands, the team sits
+  }
+  function follow(id){
+    cam.follow(id ? () => { const w = where(id); return w && [w.x, w.z, figure(id)]; } : null);
+  }
+  function mark(id){
+    marked = id || null;
+    selRing.visible = !!marked; chip.hidden = !marked; chipBox = null;
+    chip.textContent = marked === 'zeno' ? 'Zeno' : marked ? A.BY[marked].name : '';
+    DESKS.forEach(dk => { const on = dk.b.id === marked; dk.tag.el.classList.toggle('sel', on); dk.tag.sel = on ? 1 : 0; });
+    zTag.el.classList.toggle('sel', marked === 'zeno'); zTag.sel = marked === 'zeno' ? 1 : 0;
+  }
+  /* each frame: the ring follows the person's feet; the chip sits above the head (and above the desk's "!") */
+  function markTick(t){
+    if(!marked) return;
+    const w = where(marked); if(!w) return;
+    selRing.position.set(w.x, floorY(w.x, w.z) + RING_Y, w.z);
+    const wave = selRing.userData.wave, k = reduce ? 0 : (t*.8) % 1;
+    wave.scale.setScalar(1 + k*.35); wave.material.opacity = .6*(1 - k);
+  }
+  function chipTick(){
+    chipBox = null;
+    if(!marked){ return; }
+    const w = where(marked); if(!w) return;
+    _p.set(w.x, w.y + (marked === 'zeno' ? 2.75 : 2.15), w.z).project(camera);
+    if(_p.z > 1 || _p.z < -1){ chip.style.visibility = 'hidden'; return; }
+    const x = (_p.x + 1)/2*lastW, y = (1 - _p.y)/2*lastH;
+    chip.style.visibility = ''; chip.style.left = x.toFixed(1) + 'px'; chip.style.top = y.toFixed(1) + 'px';
+    const cw = chip.offsetWidth, ch = chip.offsetHeight;
+    chipBox = {x:x - cw/2, y:y - ch, w:cw, h:ch};
+  }
+  A.scene = {where, activity, focus, follow, mark};
+
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
   const alerts = DESKS.map(dk => dk.alert);
@@ -1910,7 +2241,9 @@ function start(){
         a.s.scale.setScalar(pulse); a.r.scale.setScalar(ALERT_S + p*.4); a.r.material.opacity = .85*(1-p);
       });
     }
+    markTick(t);
     renderer.render(scene, camera);
+    chipTick();
     layoutTags();
   }
   frame();
@@ -1935,6 +2268,7 @@ function createMapCam(o){
   const ease = f => f < .5 ? 4*f*f*f : 1 - Math.pow(2 - 2*f, 3)/2;
   const snap = () => ({tx:s.tx, tz:s.tz, dist:s.dist, az:s.az, tilt:s.tilt});
   let home = null, atHome = true, anim = null, fling = null, lastT = 0, btnKey = '', fitting = false, cr = null;
+  let follow = null;   // a getter for the person the camera keeps in the middle: [x, z, height]
   const crect = () => cr || (cr = canvas.getBoundingClientRect());   // the canvas only moves on resize
 
   function polar(){
@@ -1952,7 +2286,8 @@ function createMapCam(o){
     camera.lookAt(s.tx, 0, s.tz);
     camera.updateMatrixWorld();
   }
-  /* the floor point in the middle of what you see (above the sheet at its smallest) never leaves the room */
+  /* the floor point in the middle of what you see (above the sheet at its smallest) never leaves the room. It holds for
+     framed and followed people too: someone at the wall (Steve's lap corner) sits a little off centre, never out of view */
   function apply(){
     place();
     if(fitting) return;
@@ -1986,6 +2321,9 @@ function createMapCam(o){
   }
   const view = () => o.viewRect();
   function centre(){ const v = view(); return [v.x + v.w/2, v.y + v.h/2]; }
+  /* where a framed or followed person goes: the middle of the visible office below the strip at its top that the hint
+     and the follow pill use, so the name chip over their head never sits under the pill */
+  function focusCentre(){ const v = view(), top = Math.min(o.topInset || 0, v.h*.25); return [v.x + v.w/2, v.y + top + (v.h - top)/2]; }
   function stop(){ anim = null; fling = null; }
   function moved(){ atHome = false; if(o.onUser) o.onUser(); }
 
@@ -2012,6 +2350,34 @@ function createMapCam(o){
     else { s.tx = A.from.tx + (A.end.tx - A.from.tx)*f; s.tz = A.from.tz + (A.end.tz - A.from.tz)*f; apply(); }
     if(k >= 1){ Object.assign(s, A.end); apply(); anim = null; }
   }
+  /* frame a person standing on floor point P: the middle of the figure (fig metres tall) lands in the middle of the
+     office you can see (above the sheet), at the zoom and angle given; glides like the rest (reduced motion: a cut) */
+  function frame(P, to, ms){
+    moved();
+    to = to || {};
+    const end = limit(Object.assign(snap(), to)), c = focusCentre(), keep = snap();
+    const mid = solve(end, P, c);   // first P in the middle, where the figure's height on screen can be measured
+    Object.assign(s, mid); apply();
+    const feet = project(P[0], 0, P[1]), head = project(P[0], to.fig || 1.7, P[1]);
+    Object.assign(s, keep); apply();
+    glide(solve(mid, P, [c[0], c[1] + Math.max(0, feet[1] - head[1])/2]), ms == null ? 600 : ms, P);   // then half a figure lower
+  }
+  /* follow: each frame the camera eases the followed person back to the middle of the view (an exact snap while two
+     fingers or the wheel zoom and turn round them). Reduced motion: no drifting camera, it cuts once the person has
+     wandered out of the middle. */
+  function stepFollow(dt, now){
+    const W = follow(); if(!W) return;
+    const c = focusCentre(), feet = project(W[0], 0, W[1]), head = project(W[0], W[2] || 1.7, W[1]);
+    const at = [c[0], c[1] + Math.max(0, feet[1] - head[1])/2], H = floorAt(at[0], at[1]); if(!H) return;
+    let dx = W[0] - H[0], dz = W[1] - H[1];
+    if(!now){
+      if(o.reduce){ const v = view(); if(Math.abs(feet[0] - at[0]) < v.w*.18 && Math.abs(feet[1] - at[1]) < v.h*.18) return; }
+      else { const k = 1 - Math.exp(-dt/200); dx *= k; dz *= k; }
+    }
+    if(Math.abs(dx) + Math.abs(dz) < 1e-4) return;
+    s.tx += dx; s.tz += dz; apply();
+  }
+  function unfollow(){ if(!follow) return; follow = null; if(o.onUnfollow) o.onUnfollow(); }
   /* a thrown pan keeps sliding and slows down; it stops at the room's edge */
   function stepFling(dt){
     const F = fling, k = Math.exp(-dt/300);
@@ -2033,12 +2399,13 @@ function createMapCam(o){
   }
   function goHome(){
     if(!home) return;
+    unfollow();
     if(o.onUser) o.onUser();
     glide(home, 520, [home.tx, home.tz]); atHome = true;
   }
   function flyInAt(cx, cy){
     const P = floorAt(cx, cy); if(!P) return;
-    moved();
+    unfollow(); moved();
     const end = snap(); if(s.dist > lim.minDist*1.3) end.dist = Math.max(lim.minDist, s.dist*.5);
     glide(solve(limit(end), P, centre()), 480, P);
   }
@@ -2059,7 +2426,7 @@ function createMapCam(o){
     const step = {ArrowLeft:[1, 0], ArrowRight:[-1, 0], ArrowUp:[0, 1], ArrowDown:[0, -1]}[e.key];
     if(step){
       const v = view(), c = centre(), P = floorAt(c[0], c[1]); if(!P) return;
-      e.preventDefault(); moved();
+      e.preventDefault(); unfollow(); moved();
       glide(solve(snap(), P, [c[0] + step[0]*v.w*.18, c[1] + step[1]*v.h*.18]), 220, P);
     }
     else if(e.key === '+' || e.key === '='){ e.preventDefault(); act('in'); }
@@ -2070,7 +2437,7 @@ function createMapCam(o){
   /* ---- pointers: one finger pans; two pinch, twist and pan; a short touch that does not move is a tap ---- */
   const ptrs = new Map();
   let g = null, seq = null, track = [], tapTimer = 0, lastTap = null, second = false, lastType = '';
-  const skip = t => !!(t && t.closest && t.closest('.camctl, .fallback'));
+  const skip = t => !!(t && t.closest && t.closest('.camctl, .fallback, .followpill'));
   function regroup(){   // re-base the gesture whenever a finger lands or lifts, so nothing jumps
     const P = [...ptrs.values()];
     if(P.length === 1){
@@ -2089,6 +2456,7 @@ function createMapCam(o){
     seq.cap = true; seq.moved = true;
     for(const id of ptrs.keys()) capture(id);
     el.classList.add('panning'); moved();
+    if(g && g.n === 1 && !g.turn) unfollow();   // a pan is the user taking the camera: follow ends; pinch and twist keep it
   }
   el.addEventListener('pointerdown', e => {
     if(skip(e.target) || ptrs.size >= 2) return;
@@ -2097,10 +2465,10 @@ function createMapCam(o){
     stop(); lastType = e.pointerType;
     if(!ptrs.size){
       seq = {moved:false, multi:false, cap:false, stopper:wasMoving};
-      second = !!(lastTap && e.pointerType !== 'mouse' && performance.now() - lastTap.t < DOUBLE_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32);
+      second = !!(lastTap && e.pointerType !== 'mouse' && e.timeStamp - lastTap.t < DOUBLE_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32);
       if(second){ clearTimeout(tapTimer); lastTap = null; }
     } else seq.multi = true;
-    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, t0:performance.now(), type:e.pointerType, btn:e.button, onCanvas:e.target === canvas});
+    ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, t0:e.timeStamp, type:e.pointerType, btn:e.button, onCanvas:e.target === canvas});
     if(seq.cap) capture(e.pointerId);
     regroup();
   });
@@ -2117,6 +2485,7 @@ function createMapCam(o){
         s.az = az; s.tilt = tilt; apply();
         if(s.az !== az){ g.az0 = s.az; g.x0 = p.x; }   // at a limit: start again from here
         if(s.tilt !== tilt){ g.tilt0 = s.tilt; g.y0 = p.y; }
+        if(follow) stepFollow(0, true);
         return;
       }
       if(g.P) pin(g.P, p.x, p.y);
@@ -2133,7 +2502,8 @@ function createMapCam(o){
     apply();
     if(s.dist !== want){ g.dist0 = s.dist; g.d0 = d; }   // pinched past a zoom limit: start again from here
     if(g.twist && s.az !== wantAz){ g.az0 = s.az; g.ang0 = ang; }
-    if(g.P) pin(g.P, (a.x + b.x)/2, (a.y + b.y)/2);
+    if(follow) stepFollow(0, true);   // following: zoom and turn round the person, who stays put on screen
+    else if(g.P) pin(g.P, (a.x + b.x)/2, (a.y + b.y)/2);
   });
   function release(e){
     const p = ptrs.get(e.pointerId); if(!p) return;
@@ -2141,12 +2511,13 @@ function createMapCam(o){
     if(ptrs.size){ regroup(); return; }
     const G = g, S = seq; g = null; el.classList.remove('panning');
     if(S.stopper && !S.moved && !S.multi) swallowUntil = performance.now() + 400;   // the click this tap makes (say, on a desk tag) is dropped
-    if(e.type === 'pointerup' && !S.moved && !S.multi && !S.stopper && G && !G.turn && p.onCanvas && performance.now() - p.t0 < 700){
+    /* how long the finger was down, by the events' own times: a busy page that handles them late can't turn a tap into a hold */
+    if(e.type === 'pointerup' && !S.moved && !S.multi && !S.stopper && G && !G.turn && p.onCanvas && e.timeStamp - p.t0 < 700){
       const hit = o.pick(p.x, p.y);   // what is under the finger now, not after the double-tap wait
       if(p.type === 'mouse') o.onTap(hit);
       else if(second) flyInAt(p.x, p.y);
       else {   // wait a moment: a second tap turns this into a double-tap
-        lastTap = {t:performance.now(), x:p.x, y:p.y};
+        lastTap = {t:e.timeStamp, x:p.x, y:p.y};
         clearTimeout(tapTimer); tapTimer = setTimeout(() => { lastTap = null; o.onTap(hit); }, DOUBLE_MS);
       }
     } else if(G && G.n === 1 && G.live && !G.turn && !o.reduce) throwPan(G);
@@ -2171,7 +2542,8 @@ function createMapCam(o){
     const px = clamp(e.deltaY*(e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1), -400, 400);
     const P = floorAt(e.clientX, e.clientY);
     s.dist *= Math.exp(px*(e.ctrlKey ? .01 : .0018)); apply();   // ctrl+wheel is a trackpad pinch
-    if(P) pin(P, e.clientX, e.clientY);
+    if(follow) stepFollow(0, true);
+    else if(P) pin(P, e.clientX, e.clientY);
   }, {passive:false});
   el.addEventListener('contextmenu', e => { if(!skip(e.target)) e.preventDefault(); });
 
@@ -2207,18 +2579,20 @@ function createMapCam(o){
   }
   function update(now){
     const dt = Math.min(50, lastT ? now - lastT : 16); lastT = now;
-    if(anim) stepGlide(now); else if(fling) stepFling(dt);
+    if(anim) stepGlide(now); else if(fling) stepFling(dt); else if(follow) stepFollow(dt);
     syncButtons();
   }
 
   return {
-    update, resized, floorAt, project,
+    update, resized, floorAt, project, frame,
     flyTo(to, ms){
       const end = snap();
       if(to.x != null) end.tx = to.x; if(to.z != null) end.tz = to.z;
       ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; });
-      limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
+      unfollow(); limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
     },
+    follow(get){ follow = get || null; },
+    following(){ return !!follow; },
     home: goHome,
     state(){ return Object.assign(snap(), {polar:polar(), minDist:lim.minDist, maxDist:lim.maxDist, azMin:lim.azMin, azMax:lim.azMax, home:home && Object.assign({}, home)}); },
     busy(){ return !!(anim || fling || ptrs.size); },
