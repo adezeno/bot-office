@@ -188,7 +188,7 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 @media (min-width:900px),(orientation:landscape) and (max-height:540px){
   .stage{right:var(--side-w)}
   .dock{top:0;left:auto;width:var(--side-w);height:auto;transform:none;transition:none;border-top:0;border-left:2px solid var(--ink);border-radius:0;box-shadow:none}
-  .sheethead{cursor:default;touch-action:auto;padding-top:10px}
+  .sheethead{cursor:default;touch-action:pan-y;padding-top:10px}   /* sideways swipes on the card's header stay with the page */
   .grab,.chev{display:none}
   .sheetbody{padding-bottom:28px}
   .syncbtn .lg{display:inline}
@@ -1021,14 +1021,17 @@ function select(id, opts){
   var snap = opts.list ? "full" : opts.keep ? sheetSnap : (again && sheetSnap!=="full") ? sheetSnap : "half";
   sheetSet(snap);
   if(again && !opts.list && !opts.keep) setFollow(true);
-  else if(A3()) A3().focus(id, snap==='full' ? 0 : undefined);
+  else if(A3()) A3().focus(id);   /* while the full sheet covers the office, the scene frames them once it comes back down */
   if(A3()) A3().mark(id);
   syncFollow();
-  if(opts.list) requestAnimationFrame(function(){ var l = document.getElementById("cardAll"); if(l) l.scrollIntoView({block:"start"}); });
+  if(opts.list) requestAnimationFrame(showAll);
   else sheetBody.scrollTop = 0;
   if(inSheet) cardSum.focus();
   selLive.textContent = cardTitle.textContent+". "+cardAct.textContent;
 }
+/* the whole task list at the top of the sheet. Only the sheet's own list scrolls: scrollIntoView also scrolled the
+   office's container (#app, overflow hidden, with the sheet slid down inside it), so the office jumped up the screen */
+function showAll(){ var l = document.getElementById("cardAll"); if(l) sheetBody.scrollTop += l.getBoundingClientRect().top - sheetBody.getBoundingClientRect().top; }
 function deselect(){
   if(!sel) return;
   var was = sel, back = cardReturn || {snap:"peek", tab:state.tab}, inCard = document.activeElement && document.activeElement.closest && document.activeElement.closest("#cardHead, #botCard");
@@ -1212,7 +1215,7 @@ function headUp(e){
   } else if(d.kind==="bar"){
     var vx=dt>0 && !rested ? (b[1]-a[1])/dt : 0;
     if(Math.abs(vx) > .3 && !REDUCE.matches) glideBar(-vx);
-  } else if(d.kind==="swipe" && Math.abs(e.clientX-d.x0) > 50) step(e.clientX < d.x0 ? 1 : -1);
+  } else if(d.kind==="swipe" && e.type==="pointerup" && Math.abs(e.clientX-d.x0) > 50) step(e.clientX < d.x0 ? 1 : -1);   /* a cancelled touch has no position */
 }
 /* a flicked bar keeps gliding and slows down */
 function glideBar(v){
@@ -1280,7 +1283,7 @@ document.addEventListener("click", function(e){
   if(e.target.closest("#cardClose")){ deselect(); return; }
   if(e.target.closest("#cardFollow")){ setFollow(!following); return; }
   if(e.target.closest("#followPill")){ setFollow(false); return; }
-  if(e.target.closest("[data-alltasks]")){ sheetSet("full"); requestAnimationFrame(function(){ var l=document.getElementById("cardAll"); if(l) l.scrollIntoView({block:"start"}); }); return; }
+  if(e.target.closest("[data-alltasks]")){ sheetSet("full"); requestAnimationFrame(showAll); return; }
   if(e.target.closest("[data-seeall]")){ trayZeno(); return; }
   if(e.target.closest("[data-sitpc]")){ if(window.openDeskPC) window.openDeskPC(); return; }
   if((el = e.target.closest('[data-act="done"]'))){ requestChange(taskById(el.dataset.id), "done"); return; }
@@ -1921,7 +1924,10 @@ function start(){
   function stageRects(){
     if(rects) return rects;
     const r = stage.getBoundingClientRect(), below = A.sheet.peek() + camctl.offsetHeight + 18;
-    return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible())},
+    /* the camera buttons sit at the bottom right, above the sheet: where they reach the middle, where people are
+       framed, that strip is not free for them (laid out, not measured: the buttons may be sliding with the sheet) */
+    const bw = camctl.hidden ? 0 : camctl.offsetWidth, strip = bw && r.width - 10 - bw < r.width/2 + 60 ? camctl.offsetHeight + 10 : 0;
+    return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible()), below:strip},
                     free: {x:r.left + 8, y:r.top + 8, w:r.width - 16, h:Math.max(60, r.height - below - 8)}};
   }
   const cam = createMapCam({
@@ -1973,10 +1979,12 @@ function start(){
     }).filter(r => r.w && r.h);
     const v = A.sheet.visible(); if(v > 0) obstacles.push({x:0, y:sr.height - v, w:sr.width, h:v});
   }
+  let pendingFocus = null;   // someone picked while the full sheet covered the office: framed once it comes back down
   function sheetMoved(){
     rects = null;
     if(A.sheet.peek() !== lastPeek){ lastPeek = A.sheet.peek(); cam.resized(); }
     measureObstacles(); clearTimeout(obsTimer); obsTimer = setTimeout(measureObstacles, 360);   // again once the buttons stop sliding
+    if(pendingFocus && A.sheet.get() !== 'full'){ const id = pendingFocus; pendingFocus = null; focus(id); }
   }
 
   /* screen-space tag layout: project anchors, sort by priority (hovered, needs you, not dimmed, nearest),
@@ -2130,11 +2138,11 @@ function start(){
 
   /* ---------- selection: where each person is, what they are doing, a gold ring on the floor and a name chip ----------
      The portrait bar, the bot card and follow mode (classic script) reach the scene through A.scene. */
-  const RING_Y = .04;
+  const RING_Y = .04, RING_R = .62;   // the gold ring round the selected person's feet
   const selRing = new THREE.Group(); selRing.visible = false; scene.add(selRing);
   {
     const ringM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
-    const ring = new THREE.Mesh(new THREE.RingGeometry(.5, .62, 48), ringM); ring.rotation.x = -Math.PI/2; selRing.add(ring);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(RING_R - .12, RING_R, 48), ringM); ring.rotation.x = -Math.PI/2; selRing.add(ring);
     const waveM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, transparent:true, opacity:.6, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
     const wave = new THREE.Mesh(new THREE.RingGeometry(.62, .68, 48), waveM); wave.rotation.x = -Math.PI/2; selRing.add(wave);
     selRing.userData.wave = wave;
@@ -2148,7 +2156,10 @@ function start(){
     const dk = deskOf(id); if(!dk) return null;
     dk.c.root.getWorldPosition(_p); return {x:_p.x, y:_p.y, z:_p.z};
   }
-  const figure = id => id === 'zeno' ? 2.8 : 2.2;   // feet to the top of the name chip: what a close-up must fit
+  /* what a close-up must fit: from the top of the name chip, which hangs from a point over the head (above the desk's
+     "!") and is CHIP_H pixels tall at any zoom, down to the front of the gold ring on the floor */
+  const chipY = id => id === 'zeno' ? 2.75 : 2.15, CHIP_H = 23;
+  const figure = id => ({fig:chipY(id), pad:CHIP_H, ring:RING_R});
   /* what the person is doing, read from the scene and the task data only: no invented moods */
   const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
   const ZENO_DOING = {sit:['🪑', 'At the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
@@ -2169,17 +2180,21 @@ function start(){
     }
     return {icon:a[0], text:a[1]};
   }
-  /* fly to a person (about 600 ms), turning to show faces: the side-on phone view turns to 0.95 rad */
+  /* fly to a person (about 600 ms), turning to show faces: the side-on phone view turns to 0.95 rad. Not while the full
+     sheet (a whole task list) covers the office: the framing would be for a sliver of view, so it waits for the sheet */
   function focus(id, ms){
+    if(A.sheet.get() === 'full'){ pendingFocus = id; return; }
+    pendingFocus = null;
     const w = where(id); if(!w) return;
     const az = Math.max(-.95, Math.min(.95, cam.state().az));
-    cam.frame([w.x, w.z], {dist:id === 'zeno' ? 13 : 10, az, tilt:0, fig:figure(id)}, ms);   // Zeno stands, the team sits
+    cam.frame([w.x, w.z], Object.assign({dist:id === 'zeno' ? 13 : 10, az, tilt:0}, figure(id)), ms);   // Zeno stands, the team sits
   }
   function follow(id){
-    cam.follow(id ? () => { const w = where(id); return w && [w.x, w.z, figure(id)]; } : null);
+    cam.follow(id ? () => { const w = where(id); return w && [w.x, w.z]; } : null, id && figure(id));
   }
   function mark(id){
     marked = id || null;
+    if(pendingFocus !== marked) pendingFocus = null;
     selRing.visible = !!marked; chip.hidden = !marked; chipBox = null;
     chip.textContent = marked === 'zeno' ? 'Zeno' : marked ? A.BY[marked].name : '';
     DESKS.forEach(dk => { const on = dk.b.id === marked; dk.tag.el.classList.toggle('sel', on); dk.tag.sel = on ? 1 : 0; });
@@ -2197,7 +2212,7 @@ function start(){
     chipBox = null;
     if(!marked){ return; }
     const w = where(marked); if(!w) return;
-    _p.set(w.x, w.y + (marked === 'zeno' ? 2.75 : 2.15), w.z).project(camera);
+    _p.set(w.x, w.y + chipY(marked), w.z).project(camera);
     if(_p.z > 1 || _p.z < -1){ chip.style.visibility = 'hidden'; return; }
     const x = (_p.x + 1)/2*lastW, y = (1 - _p.y)/2*lastH;
     chip.style.visibility = ''; chip.style.left = x.toFixed(1) + 'px'; chip.style.top = y.toFixed(1) + 'px';
@@ -2268,7 +2283,7 @@ function createMapCam(o){
   const ease = f => f < .5 ? 4*f*f*f : 1 - Math.pow(2 - 2*f, 3)/2;
   const snap = () => ({tx:s.tx, tz:s.tz, dist:s.dist, az:s.az, tilt:s.tilt});
   let home = null, atHome = true, anim = null, fling = null, lastT = 0, btnKey = '', fitting = false, cr = null;
-  let follow = null;   // a getter for the person the camera keeps in the middle: [x, z, height]
+  let follow = null, followFig = {};   // a getter for where the person the camera keeps in the middle stands: [x, z]
   const crect = () => cr || (cr = canvas.getBoundingClientRect());   // the canvas only moves on resize
 
   function polar(){
@@ -2321,9 +2336,13 @@ function createMapCam(o){
   }
   const view = () => o.viewRect();
   function centre(){ const v = view(); return [v.x + v.w/2, v.y + v.h/2]; }
-  /* where a framed or followed person goes: the middle of the visible office below the strip at its top that the hint
-     and the follow pill use, so the name chip over their head never sits under the pill */
-  function focusCentre(){ const v = view(), top = Math.min(o.topInset || 0, v.h*.25); return [v.x + v.w/2, v.y + top + (v.h - top)/2]; }
+  /* where a framed or followed person goes: the middle of the visible office between the strip at its top that the hint
+     and the follow pill use and the strip at its bottom that the camera buttons use (view.below), so the name chip over
+     their head never sits under the pill, nor their feet under the buttons. h: the height free for them */
+  function focusArea(){
+    const v = view(), top = Math.min(o.topInset || 0, v.h*.25), bot = Math.min(v.below || 0, v.h*.25);
+    return {x:v.x + v.w/2, y:v.y + top + (v.h - top - bot)/2, h:v.h - top - bot};
+  }
   function stop(){ anim = null; fling = null; }
   function moved(){ atHome = false; if(o.onUser) o.onUser(); }
 
@@ -2350,25 +2369,44 @@ function createMapCam(o){
     else { s.tx = A.from.tx + (A.end.tx - A.from.tx)*f; s.tz = A.from.tz + (A.end.tz - A.from.tz)*f; apply(); }
     if(k >= 1){ Object.assign(s, A.end); apply(); anim = null; }
   }
-  /* frame a person standing on floor point P: the middle of the figure (fig metres tall) lands in the middle of the
-     office you can see (above the sheet), at the zoom and angle given; glides like the rest (reduced motion: a cut) */
+  /* a person standing on floor point P, as the camera sees them now: pixels from the feet up to the top of the figure
+     (f.fig metres, plus f.pad pixels for the name chip) and down to the front of the ring on the floor (f.ring metres
+     towards the camera) */
+  function span(P, f){
+    const feet = project(P[0], 0, P[1])[1], r = f.ring || 0;
+    return [Math.max(0, feet - project(P[0], f.fig || 1.7, P[1])[1] + (f.pad || 0)),
+            Math.max(0, project(P[0] + r*Math.sin(s.az), 0, P[1] + r*Math.cos(s.az))[1] - feet)];
+  }
+  /* frame a person standing on floor point P: the middle of the figure lands in the middle of the office you can see
+     (focusArea: between the top strip and the camera buttons, above the sheet), at the zoom and angle given. A figure
+     too tall for that space (a small phone) is framed from further back, so the chip stays clear of the follow pill and
+     the ring clear of the buttons and the sheet. Its height on screen depends on where it stands (lower down is nearer
+     the camera, so taller), so it is measured where it ends up, over a few rounds. Glides like the rest (reduced
+     motion: a cut) */
+  const FIT_GAP = 8;   // px kept free above the chip and below the ring
   function frame(P, to, ms){
     moved();
     to = to || {};
-    const end = limit(Object.assign(snap(), to)), c = focusCentre(), keep = snap();
-    const mid = solve(end, P, c);   // first P in the middle, where the figure's height on screen can be measured
-    Object.assign(s, mid); apply();
-    const feet = project(P[0], 0, P[1]), head = project(P[0], to.fig || 1.7, P[1]);
+    const end = limit(Object.assign(snap(), to)), a = focusArea(), c = [a.x, a.y], keep = snap();
+    const fit = a.h - 2*FIT_GAP;   // the figure's whole height on screen that fits
+    let at = c;
+    for(let i = 0; i < 4; i++){
+      Object.assign(s, solve(end, P, at)); apply();
+      let [up, down] = span(P, to);
+      if(up + down > fit && fit > 40){ const k = (up + down)/fit; end.dist = s.dist*k; limit(end); up /= k; down /= k; }   // too tall: back off
+      at = [c[0], c[1] + (up - down)/2];   // the figure's middle in the middle
+    }
+    const out = solve(end, P, at);
     Object.assign(s, keep); apply();
-    glide(solve(mid, P, [c[0], c[1] + Math.max(0, feet[1] - head[1])/2]), ms == null ? 600 : ms, P);   // then half a figure lower
+    glide(out, ms == null ? 600 : ms, P);
   }
   /* follow: each frame the camera eases the followed person back to the middle of the view (an exact snap while two
      fingers or the wheel zoom and turn round them). Reduced motion: no drifting camera, it cuts once the person has
      wandered out of the middle. */
   function stepFollow(dt, now){
     const W = follow(); if(!W) return;
-    const c = focusCentre(), feet = project(W[0], 0, W[1]), head = project(W[0], W[2] || 1.7, W[1]);
-    const at = [c[0], c[1] + Math.max(0, feet[1] - head[1])/2], H = floorAt(at[0], at[1]); if(!H) return;
+    const a = focusArea(), c = [a.x, a.y], feet = project(W[0], 0, W[1]), [up, down] = span(W, followFig);
+    const at = [c[0], c[1] + (up - down)/2], H = floorAt(at[0], at[1]); if(!H) return;
     let dx = W[0] - H[0], dz = W[1] - H[1];
     if(!now){
       if(o.reduce){ const v = view(); if(Math.abs(feet[0] - at[0]) < v.w*.18 && Math.abs(feet[1] - at[1]) < v.h*.18) return; }
@@ -2442,7 +2480,9 @@ function createMapCam(o){
     const P = [...ptrs.values()];
     if(P.length === 1){
       const p = P[0];
-      g = {n:1, P:floorAt(p.x, p.y), live:seq.moved, turn:p.type === 'mouse' && p.btn === 2, x0:p.x, y0:p.y, az0:s.az, tilt0:s.tilt};
+      // the finger left after a pinch pans on at once, except while following: there it has to travel a few pixels first,
+      // so a pinch that ends one finger at a time keeps following, and a real drag with that finger ends it
+      g = {n:1, P:floorAt(p.x, p.y), live:seq.moved && !follow, turn:p.type === 'mouse' && p.btn === 2, x0:p.x, y0:p.y, az0:s.az, tilt0:s.tilt};
       track = [[performance.now(), p.x, p.y]];
     } else if(P.length >= 2){
       const [a, b] = P;
@@ -2456,7 +2496,6 @@ function createMapCam(o){
     seq.cap = true; seq.moved = true;
     for(const id of ptrs.keys()) capture(id);
     el.classList.add('panning'); moved();
-    if(g && g.n === 1 && !g.turn) unfollow();   // a pan is the user taking the camera: follow ends; pinch and twist keep it
   }
   el.addEventListener('pointerdown', e => {
     if(skip(e.target) || ptrs.size >= 2) return;
@@ -2477,8 +2516,9 @@ function createMapCam(o){
     p.x = e.clientX; p.y = e.clientY;
     if(g.n === 1){
       if(!g.live){
-        if(Math.hypot(p.x - p.x0, p.y - p.y0) < (p.type === 'mouse' ? 4 : 8)) return;
+        if(Math.hypot(p.x - g.x0, p.y - g.y0) < (p.type === 'mouse' ? 4 : 8)) return;
         g.live = true; begin();
+        if(!g.turn) unfollow();   // a pan is the user taking the camera: follow ends; pinch and twist keep it
       }
       if(g.turn){
         const az = g.az0 - (p.x - g.x0)*.006, tilt = g.tilt0 - (p.y - g.y0)*.004;
@@ -2591,7 +2631,7 @@ function createMapCam(o){
       ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; });
       unfollow(); limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
     },
-    follow(get){ follow = get || null; },
+    follow(get, fig){ follow = get || null; followFig = fig || {}; },
     following(){ return !!follow; },
     home: goHome,
     state(){ return Object.assign(snap(), {polar:polar(), minDist:lim.minDist, maxDist:lim.maxDist, azMin:lim.azMin, azMax:lim.azMax, home:home && Object.assign({}, home)}); },
