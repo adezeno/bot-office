@@ -116,25 +116,35 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 .tip[hidden]{display:none}
 .tip small{display:block;color:var(--muted);font-weight:700;font-size:10.5px;margin-top:2px}
 
-/* one projected tag per desk (name · role · status pill), placed by a screen-space overlap pass */
+/* head bubbles: one over each person, saying only what the board says ("!" and a count: needs you; ⌨️ working; ⏳ waiting
+   on others; 📥 inbox only; 💤 nothing open; Zeno: the tray). A late task adds a crimson rim, the selected person a gold
+   one. Drawn, never tapped: taps are picked in code (the bubble as drawn, then 3D hit capsules), so no bubble can catch
+   a touch meant for someone else. Names show for the selected person and for anyone drawn big enough to read one. */
 .labels{position:absolute!important;inset:0;pointer-events:none;z-index:4;overflow:hidden}
-.lab3d{position:absolute;left:0;top:0;visibility:hidden;transition:opacity .2s;will-change:transform}
-.lab3d.dim{opacity:.4}
-.tag3d{pointer-events:auto;cursor:pointer;display:inline-flex;align-items:center;gap:5px;background:rgba(26,22,18,.9);color:#fff;border:1.5px solid #fff;border-radius:999px;padding:1px 3px 1px 8px;font-size:10.5px;font-weight:700;line-height:1.4;white-space:nowrap;box-shadow:0 1px 4px rgba(26,22,18,.3)}
-.tag3d.nopill{padding-right:8px}
-.tag3d .role{font-weight:500;opacity:.72}
-.lab3d.hot .tag3d,.tag3d:hover{background:var(--steel)}
-.tag3d.zen{background:var(--crimson)}
-.tag3d.zen .pill{background:#fff;color:var(--crimson)}
+.hb{--tail:var(--ink);--tx:0px;position:absolute;left:0;top:0;z-index:1;display:flex;align-items:center;gap:4px;height:20px;min-width:20px;padding:0 6px;border-radius:999px;
+  background:#fff;color:var(--ink);border:2px solid var(--ink);font:800 11.5px/1 var(--round);white-space:nowrap;pointer-events:none;visibility:hidden;will-change:transform;
+  box-shadow:0 1px 3px rgba(26,22,18,.35);transition:opacity .2s}
+.hb::after{content:"";position:absolute;top:100%;left:50%;margin-left:calc(var(--tx) - 5px);border:5px solid transparent;border-top:6px solid var(--tail);border-bottom:0}
+.hb b{font-weight:800;letter-spacing:-.01em}
+.hb .nm{display:none;font-weight:700}
+.hb.named .nm{display:inline}
+.hb.need{--tail:var(--crimson);z-index:2;background:var(--crimson);color:#fff;border-color:#fff}
+.hb.zeno{--tail:var(--gold);z-index:2;border-color:var(--gold)}
+.hb.late{box-shadow:0 0 0 2px var(--crimson),0 1px 3px rgba(26,22,18,.35)}
+.hb.hot{--tail:var(--steel);border-color:var(--steel)}
+.hb.need.hot{border-color:#fff}
+.hb.sel{z-index:3;box-shadow:0 0 0 2.5px var(--gold),0 1px 3px rgba(26,22,18,.35)}
+.hb.sel.late{box-shadow:0 0 0 2px var(--crimson),0 0 0 4.5px var(--gold),0 1px 3px rgba(26,22,18,.35)}
+.hb.dim{opacity:.4}
+/* crowded out: a small dot in the state's colour where the bubble would be */
+.hb.dot{width:10px;min-width:0;height:10px;padding:0;border-width:1.5px;background:#b9ab9a}
+.hb.dot b,.hb.dot .nm,.hb.dot::after{display:none}
+.hb.dot.work{background:var(--green)}.hb.dot.wait{background:var(--steel)}.hb.dot.inbox{background:var(--paper3)}
 .pill{display:inline-block;border-radius:999px;padding:0 6px;font-size:10px;font-weight:800;line-height:1.5;white-space:nowrap}
 .pill.need{background:var(--crimson);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
 .pill.work{background:var(--n-doing);color:#1e5a36}
 .pill.wait{background:var(--n-wait);color:#0b4f6c}
-@media (max-width:640px){
-  .tag3d{font-size:10px;gap:4px;padding-left:6px}
-  .tag3d .role{display:none}
-  .pill{font-size:9.5px;padding:0 5px}
-}
+@media (max-width:640px){.pill{font-size:9.5px;padding:0 5px}}
 
 /* fallback (no WebGL) */
 .fallback{padding:16px 16px calc(var(--sheet-vis) + 24px)}
@@ -274,9 +284,6 @@ details.cdone summary{cursor:pointer;padding:6px 0;font-weight:700;color:var(--i
 .followpill[hidden]{display:none}
 .followpill .px{width:28px;height:28px;border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center;font-size:14px;font-weight:800;flex:none}
 #app.sheet-full .followpill{visibility:hidden}
-.selchip{position:absolute;left:0;top:0;z-index:5;transform:translate(-50%,-100%);pointer-events:none;background:var(--ink);color:#fff;border:2px solid var(--gold);border-radius:999px;padding:1px 10px;font:800 12px/1.4 var(--round);white-space:nowrap;box-shadow:2px 2px 0 rgba(26,22,18,.2)}
-.selchip[hidden]{display:none}
-.lab3d.sel .tag3d{background:var(--ink);box-shadow:0 0 0 2px var(--gold),0 1px 4px rgba(26,22,18,.3)}
 
 /* ---------- modal ---------- */
 .scrim{position:fixed;inset:0;background:rgba(26,22,18,.38);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -364,7 +371,6 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
 .nextform input,.nextform textarea,select{font-size:16px}
 @media (max-width:640px){
   .tab,.chip,.toggle,.x,.abtn,button,select{min-height:44px}
-  .tag3d{position:relative}.tag3d::after{content:"";position:absolute;inset:-13px -4px}
 }
 </style>
 </head>
@@ -670,14 +676,14 @@ function pillHTML(c){
   return '';
 }
 function aria(b,c){return 'Open '+label(b)+': '+c.open+' open, '+c.need+' need you';}
-function tagHTML(id){
-  var b=BY[id], c=counts(id), p=pillHTML(c);
-  return '<button class="tag3d'+(p?'':' nopill')+'" data-bot="'+id+'" aria-label="'+esc(aria(b,c))+'">'+b.prop+' <b>'+esc(b.name)+'</b>'+
-    (b.role?'<span class="role">'+esc(b.role)+'</span>':'')+p+'</button>';
-}
-function zenoTagHTML(){
-  var n=NEEDS.length;
-  return '<button class="tag3d zen" data-zeno="1" aria-label="Your tray: '+n+' things need you. Tap to see only these.">📥 Your tray · '+(n?n+' need you':'empty')+'</button>';
+/* the head bubble over a person in the office: what the board says, nothing invented. need: "!" and how many things
+   need you; work: up next or doing; wait: waiting on others; inbox: only unsorted ones; idle: nothing open.
+   Zeno's is the tray: everything that needs you. late: one of their open tasks is past its date */
+var GLYPH = {need:"!", work:"⌨️", wait:"⏳", inbox:"📥", idle:"💤", zeno:"📥"};
+function bubble(id){
+  if(id==="zeno") return {kind:"zeno", glyph:GLYPH.zeno, count:NEEDS.length, late:NEEDS.some(function(t){return t._over;}), name:"Zeno"};
+  var c = counts(id), kind = c.need ? "need" : c.work ? "work" : c.wait ? "wait" : c.inbox ? "inbox" : "idle";
+  return {kind:kind, glyph:GLYPH[kind], count:kind==="need" ? c.need : 0, late:tasksOf(id).some(function(t){return t._over;}), name:BY[id].name};
 }
 
 /* ---------- floor (needs queue, done pile, fallback list) ---------- */
@@ -1336,7 +1342,7 @@ window.BotOffice = {
       .sort(function(a,b){return (b.match-a.match) || (KIND_ORDER[a.kind]-KIND_ORDER[b.kind]);});
   },
   tipHTML:function(k){var t=byKey(k); return t ? T(t.title)+'<small>'+esc(t.id)+' · '+esc(STAGE_LABEL[t.stage]||t.stage)+(t._why?' · needs you':'')+'</small>' : '';},
-  tagHTML:tagHTML, zenoTagHTML:zenoTagHTML,
+  bubble:bubble,
   openModal:openModal, goZeno:goZeno,
   /* the selected person (portrait bar, bot card, follow): 'zeno' or a bot id */
   select:select, deselect:deselect, selected:function(){return sel;}, people:people,
@@ -1613,41 +1619,14 @@ function start(){
     return {root, body, head, eyes, handL, handR};
   }
 
-  /* pulsing '!' sprite with a ping ring */
-  const alertMap = canvasTex(128, 128, g => {
-    g.beginPath(); g.arc(64, 64, 52, 0, Math.PI*2); g.fillStyle = '#990F3D'; g.fill(); g.lineWidth = 9; g.strokeStyle = '#fff'; g.stroke();
-    g.fillStyle = '#fff'; g.font = '900 78px "Trebuchet MS", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('!', 64, 70);
-  });
-  const ringMap = canvasTex(128, 128, g => { g.beginPath(); g.arc(64, 64, 52, 0, Math.PI*2); g.lineWidth = 8; g.strokeStyle = '#990F3D'; g.stroke(); });
-  function makeAlert(parent, x, y, z){
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({map:alertMap, depthTest:false, transparent:true}));
-    const r = new THREE.Sprite(new THREE.SpriteMaterial({map:ringMap, depthTest:false, transparent:true}));
-    s.renderOrder = 11; r.renderOrder = 10; s.position.set(x, y, z); r.position.set(x, y, z); s.scale.setScalar(ALERT_S); r.scale.setScalar(ALERT_S);
-    parent.add(r); parent.add(s);
-    return {s, r, set(on){ s.visible = r.visible = on; }};
-  }
-  const ALERT_S = .3;
-
-  /* desk tag: anchored low at the desk front, hangs just below it; placed each frame by layoutTags() */
-  const TAGS = [];
-  function makeTag(parent, x, y, z){
-    const el = document.createElement('div'); el.className = 'lab3d'; labels.appendChild(el);
-    parent.updateMatrixWorld(true);
-    const L = {el, world: parent.localToWorld(new THREE.Vector3(x, y, z)), w:0, h:0, x:NaN, y:NaN, vis:false, hot:0, sel:0, need:0, dim:0};
-    TAGS.push(L); return L;
-  }
-  function setTag(L, html){ L.el.innerHTML = html; L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
-
   const DESKS = [];
   A.BOTS.forEach(b => {
     const p = POS[b.id]; if(!p) return;
     const d = buildDesk(p.x, p.z, {big:p.big, mug:b.color});
     const c = buildChar(b, d.g);
     pickable(d.g, {bot:b.id});
-    const tag = makeTag(d.g, 0, .32, d.Dp/2+.1);
-    const alert = makeAlert(d.g, .36, 1.8, -.9);
     const notes = new THREE.Group(); d.g.add(notes);
-    DESKS.push({b, d, c, tag, alert, notes, phase: Math.random()*6.28, working:false, idle:false});
+    DESKS.push({b, d, c, notes, phase: Math.random()*6.28, working:false, idle:false});
   });
 
   /* Zeno's desk: empty chair, inbox tray */
@@ -1663,7 +1642,6 @@ function start(){
   const papers = new THREE.Group(); tray.add(papers);
   const paperGeo = new THREE.BoxGeometry(.5, .012, .34);
   pickable(Z.g, {zeno:true});
-  const zTag = makeTag(Z.g, 0, .32, Z.Dp/2+.1);
 
   /* ---------- Founder's corner office (Zeno) ---------- */
   const FO = {x0:6.8, x1:RX, z0:-RZ, z1:-3.8};
@@ -1896,18 +1874,13 @@ function start(){
     DESKS.forEach(desk => {
       const id = desk.b.id, c = A.counts(id);
       refreshNotes(desk);
-      const dim = A.isDim(id);
-      setTag(desk.tag, A.tagHTML(id));
-      desk.tag.el.classList.toggle('dim', dim);
-      desk.tag.need = c.need > 0 ? 1 : 0; desk.tag.dim = dim ? 1 : 0;
-      desk.alert.set(c.need > 0);
       desk.working = (c.work + c.need) > 0;
       desk.idle = c.open === 0;
       desk.d.screenM.emissiveIntensity = desk.working ? .6 : .15;
       notePicks.push(...desk.noteMeshes);
     });
+    HB.forEach(B => { B.data = A.bubble(B.id); B.dim = B.id !== 'zeno' && A.isDim(B.id); });
     const n = A.needCount();
-    setTag(zTag, A.zenoTagHTML()); zTag.need = n > 0 ? 1 : 0;
     papers.clear();
     for(let i=0;i<Math.min(n, 14);i++){
       const p = new THREE.Mesh(paperGeo, mat(i%3 ? '#f6efe6' : '#ffffff'));
@@ -1966,10 +1939,10 @@ function start(){
     renderer.setSize(w, h, false);
     camera.aspect = w/h; camera.updateProjectionMatrix();
     rects = null; lastPeek = A.sheet.peek(); cam.resized();
-    TAGS.forEach(L => { L.w = 0; });   // phone/desktop tag styles differ; re-measure lazily
+    HB.forEach(B => { B.key = ''; });   // re-measure the bubbles lazily
     measureObstacles();
   }
-  /* overlays tags must not sit under: the camera buttons, the hint, and the strip of office the sheet covers */
+  /* overlays bubbles must not sit under: the camera buttons, the hint, and the strip of office the sheet covers */
   let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
@@ -1987,41 +1960,79 @@ function start(){
     if(pendingFocus && A.sheet.get() !== 'full'){ const id = pendingFocus; pendingFocus = null; focus(id); }
   }
 
-  /* screen-space tag layout: project anchors, sort by priority (hovered, needs you, not dimmed, nearest),
-     then place greedily at the anchor or a small nudge; anything that would still overlap is hidden */
-  const pv = new THREE.Vector3(), GAP = 3, EDGE = 4;
-  function hideTag(L){ if(L.vis){ L.el.style.visibility = 'hidden'; L.vis = false; } }
-  function layoutTags(){
+  /* ---------- head bubbles (CSS .hb): one per person, over the head, moving with them ----------
+     Laid out each frame in screen space: the selected person first, then whoever needs you (late ones, then the most),
+     Zeno, then the rest, nearest first. Each sits with its tail on the head, or slides sideways as far as the tail can
+     still reach it. It keeps clear of the HUD and of bubbles already placed, and where it can of other people's bodies.
+     The selected person's, Zeno's and any that needs you are never dropped for crowding; the rest shrink to a dot in
+     their colour, or hide when even the dot would overlap. Taps never land on them (pointer-events: none). */
+  const BUB_Y = id => id === 'zeno' ? 2.65 : 1.9;      // the tail's tip: just over the head (over Zeno's plumbob)
+  const HEAD_TOP = id => id === 'zeno' ? 1.95 : 1.64;   // the team sits, Zeno stands
+  const TAIL = 6, GAP = 2, EDGE = 4, NAME_ON = 40, NAME_OFF = 36;   // a name once someone is drawn 40px tall, gone again under 36
+  const HB = ['zeno'].concat(A.BOTS.map(b => b.id)).map(id => {
+    const el = document.createElement('div'); el.className = 'hb'; el.dataset.person = id; el.setAttribute('aria-hidden', 'true');
+    labels.appendChild(el);
+    return {id, el, key:'', data:null, dim:false, big:false, w:0, h:0, x:NaN, y:NaN, tx:NaN, box:null, shown:false, dot:false, named:false, ax:0, ay:0, depth:0, rank:3, body:null};
+  });
+  const HBY = {}; HB.forEach(B => { HBY[B.id] = B; });
+  const pv = new THREE.Vector3();
+  function hideB(B){ if(B.shown){ B.el.style.visibility = 'hidden'; B.shown = false; } B.box = null; }
+  /* what the bubble says, rebuilt and measured only when it changes */
+  function paintB(B, named){
+    const d = B.data, sel = B.id === marked, hot = B.id === hoverId;
+    const key = [d.kind, d.count, d.late, named, sel, hot, B.dim].join();
+    if(key === B.key) return;
+    B.key = key; B.named = named;
+    B.el.className = 'hb ' + d.kind + (d.late ? ' late' : '') + (named ? ' named' : '') + (sel ? ' sel' : '') + (hot ? ' hot' : '') + (B.dim ? ' dim' : '');
+    B.el.innerHTML = '<b></b><span class="nm"></span>';
+    B.el.firstChild.textContent = d.glyph + (d.count ? (d.kind === 'need' ? '' : ' ') + d.count : '');
+    B.el.lastChild.textContent = d.name;
+    B.w = B.el.offsetWidth; B.h = B.el.offsetHeight;   // measured full size, then shrunk again if it is a dot
+    if(B.dot) B.el.classList.add('dot');
+  }
+  function showB(B, r, dot){
+    if(dot !== B.dot){ B.dot = dot; B.el.classList.toggle('dot', dot); }
+    const x = Math.round(r.x), y = Math.round(r.y), tx = dot ? 0 : Math.round(Math.max(8 - B.w/2, Math.min(B.w/2 - 8, B.ax - (x + B.w/2))));
+    if(x !== B.x || y !== B.y){ B.el.style.transform = 'translate(' + x + 'px,' + y + 'px)'; B.x = x; B.y = y; }
+    if(tx !== B.tx){ B.el.style.setProperty('--tx', tx + 'px'); B.tx = tx; }
+    if(!B.shown){ B.el.style.visibility = 'visible'; B.shown = true; }
+    B.box = {x, y, w:r.w, h:r.h};
+  }
+  function layoutBubbles(){
     const W = lastW, H = lastH; if(!W || !H) return;
-    const items = [];
-    TAGS.forEach(L => {
-      if(!L.w){ L.w = L.el.offsetWidth; L.h = L.el.offsetHeight; }
-      if(!L.w){ hideTag(L); return; }
-      pv.copy(L.world).project(camera);
-      if(pv.z > 1 || pv.z < -1){ hideTag(L); return; }
-      L.sx = (pv.x+1)/2*W; L.sy = (1-pv.y)/2*H;
-      if(L.sx < -L.w || L.sx > W+L.w || L.sy < -L.h || L.sy > H+L.h){ hideTag(L); return; }
-      L.depth = camera.position.distanceToSquared(L.world);
-      items.push(L);
-    });
-    items.sort((a, b) => (b.sel-a.sel) || (b.hot-a.hot) || (b.need-a.need) || (a.dim-b.dim) || (a.depth-b.depth));
-    const rects = obstacles.slice();
-    if(chipBox) rects.push(chipBox);   // the selected person's name chip stays readable
-    const hit = r => rects.some(o => r.x < o.x+o.w+GAP && r.x+r.w+GAP > o.x && r.y < o.y+o.h+GAP && r.y+r.h+GAP > o.y);
-    items.forEach(L => {
-      const s = L.h + GAP, tries = [[0,0],[0,s],[-L.w*.35,0],[L.w*.35,0],[0,-s],[0,2*s]];
-      let ok = null;
-      for(const [dx, dy] of tries){
-        const x = Math.round(Math.max(EDGE, Math.min(W-L.w-EDGE, L.sx - L.w/2 + dx))), y = Math.round(L.sy + dy);
-        if(y < EDGE || y+L.h > H-EDGE) continue;
-        const r = {x, y, w:L.w, h:L.h};
-        if(!hit(r)){ ok = r; break; }
-      }
-      if(!ok){ hideTag(L); return; }
-      rects.push(ok);
-      if(ok.x !== L.x || ok.y !== L.y){ L.el.style.transform = 'translate('+ok.x+'px,'+ok.y+'px)'; L.x = ok.x; L.y = ok.y; }
-      if(!L.vis){ L.el.style.visibility = 'visible'; L.vis = true; }
-    });
+    const items = [], bodies = [];
+    for(const B of HB){
+      const w = where(B.id); if(!w || !B.data){ hideB(B); continue; }
+      pv.set(w.x, w.y + BUB_Y(B.id), w.z).project(camera);
+      if(pv.z > 1 || pv.z < -1){ hideB(B); continue; }   // behind the camera
+      B.ax = (pv.x + 1)/2*W; B.ay = (1 - pv.y)/2*H;
+      pv.set(w.x, w.y, w.z).project(camera); const fx = (pv.x + 1)/2*W, fy = (1 - pv.y)/2*H;
+      pv.set(w.x, w.y + HEAD_TOP(B.id), w.z).project(camera); const tall = fy - (1 - pv.y)/2*H;
+      B.big = B.big ? tall >= NAME_OFF : tall >= NAME_ON;
+      B.body = {x:fx - tall*.28, y:fy - tall, w:tall*.56, h:Math.max(2, tall)};
+      bodies.push(B);
+      if(B.ax < -100 || B.ax > W + 100 || B.ay < -100 || B.ay > H + 100){ hideB(B); continue; }
+      paintB(B, B.big || B.id === marked || B.id === hoverId);
+      B.depth = camera.position.distanceToSquared(pv.set(w.x, w.y, w.z));
+      B.rank = B.id === marked ? 0 : B.data.kind === 'need' ? 1 : B.id === 'zeno' ? 2 : 3;
+      items.push(B);
+    }
+    items.sort((a, b) => (a.rank - b.rank) || (a.rank === 1 && ((b.data.late - a.data.late) || (b.data.count - a.data.count))) || (a.depth - b.depth));
+    const placed = [];
+    const hit = (r, list) => list.some(o => r.x < o.x + o.w + GAP && r.x + r.w + GAP > o.x && r.y < o.y + o.h + GAP && r.y + r.h + GAP > o.y);
+    const inView = r => r.x >= EDGE && r.x + r.w <= W - EDGE && r.y >= EDGE && r.y + r.h <= H - EDGE;
+    const clear = r => inView(r) && !hit(r, obstacles);
+    for(const B of items){
+      const n = Math.max(0, B.w/2 - 9), others = bodies.filter(o => o !== B).map(o => o.body);
+      const tries = [0, -n, n].map(dx => ({x:B.ax - B.w/2 + dx, y:B.ay - TAIL - B.h, w:B.w, h:B.h}));
+      const free = r => clear(r) && !hit(r, placed);
+      let r = tries.find(t => free(t) && !hit(t, others)) || tries.find(free), dot = false;
+      if(!r && B.rank < 3) r = tries.find(clear);   // never crowded out: drawn over its neighbour instead
+      if(!r && B.rank === 3){ const d = {x:B.ax - 5, y:B.ay - 10, w:10, h:10}; if(free(d)){ r = d; dot = true; } }
+      if(!r){ hideB(B); continue; }
+      placed.push(r);
+      showB(B, r, dot);
+    }
   }
   new ResizeObserver(resize).observe(stage);
   resize();
@@ -2044,11 +2055,7 @@ function start(){
   cvs.addEventListener('pointerdown', () => { tip.hidden = true; });
   cvs.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' && !cam.dragging()) moveQ = {x:e.clientX, y:e.clientY}; });
   cvs.addEventListener('pointerleave', () => { moveQ = null; setHover(null); stage.classList.remove('hot'); tip.hidden = true; });
-  function setHover(id){
-    if(id === hoverId) return;
-    DESKS.forEach(dk => { const on = dk.b.id === id; dk.tag.el.classList.toggle('hot', on); dk.tag.hot = on ? 1 : 0; });
-    hoverId = id;
-  }
+  function setHover(id){ hoverId = id; }   // the bubble shows it (and the name) on the next frame
   function doHover(){
     if(!moveQ) return;
     const {x, y} = moveQ; moveQ = null;
@@ -2070,7 +2077,9 @@ function start(){
     BUBS.push({who, el, until: clock.getElapsedTime() + (secs || 2.5)});
   }
   const _v = new THREE.Vector3();
+  /* a speech bubble sits on top of the person's head bubble (or where it would be) */
   function bubPos(b){
+    const B = HBY[b.who]; if(B && B.shown && B.box) return [B.box.x + B.box.w/2, B.box.y - 3];
     if(b.who === 'zeno') _v.set(ZC.g.position.x, ZC.g.position.y + 2.5, ZC.g.position.z);
     else { const dk = DESKS.find(d => d.b.id === b.who); if(!dk) return null; dk.c.root.getWorldPosition(_v); _v.y += 2.0; }
     _v.project(camera); if(_v.z > 1) return null;
@@ -2133,10 +2142,9 @@ function start(){
     for(let k = BUBS.length-1; k >= 0; k--){ const b = BUBS[k];
       if(now > b.until){ b.el.remove(); BUBS.splice(k, 1); continue; }
       const p = bubPos(b); if(!p){ b.el.hidden = true; continue; } b.el.hidden = false; b.el.style.left = p[0]+'px'; b.el.style.top = p[1]+'px'; }
-    zTag.el.style.display = (smallScreen && window.zenoSeated && window.zenoSeated()) ? 'none' : '';
   }
 
-  /* ---------- selection: where each person is, what they are doing, a gold ring on the floor and a name chip ----------
+  /* ---------- selection: where each person is, what they are doing, a gold ring on the floor, their bubble named ----------
      The portrait bar, the bot card and follow mode (classic script) reach the scene through A.scene. */
   const RING_Y = .04, RING_R = .62;   // the gold ring round the selected person's feet
   const selRing = new THREE.Group(); selRing.visible = false; scene.add(selRing);
@@ -2147,8 +2155,7 @@ function start(){
     const wave = new THREE.Mesh(new THREE.RingGeometry(.62, .68, 48), waveM); wave.rotation.x = -Math.PI/2; selRing.add(wave);
     selRing.userData.wave = wave;
   }
-  const chip = document.createElement('div'); chip.className = 'selchip'; chip.hidden = true; labels.appendChild(chip);
-  let marked = null, chipBox = null;
+  let marked = null;
   const _p = new THREE.Vector3();
   function deskOf(id){ return DESKS.find(d => d.b.id === id); }
   function where(id){
@@ -2156,10 +2163,10 @@ function start(){
     const dk = deskOf(id); if(!dk) return null;
     dk.c.root.getWorldPosition(_p); return {x:_p.x, y:_p.y, z:_p.z};
   }
-  /* what a close-up must fit: from the top of the name chip, which hangs from a point over the head (above the desk's
-     "!") and is CHIP_H pixels tall at any zoom, down to the front of the gold ring on the floor */
-  const chipY = id => id === 'zeno' ? 2.75 : 2.15, CHIP_H = 23;
-  const figure = id => ({fig:chipY(id), pad:CHIP_H, ring:RING_R});
+  /* what a close-up must fit: from the top of the head bubble, whose tail points at a spot over the head and which is
+     CHIP_H pixels tall at any zoom (with the gold rim), down to the front of the gold ring on the floor */
+  const CHIP_H = 29;
+  const figure = id => ({fig:BUB_Y(id), pad:CHIP_H, ring:RING_R});
   /* what the person is doing, read from the scene and the task data only: no invented moods */
   const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
   const ZENO_DOING = {sit:['🪑', 'At the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
@@ -2195,12 +2202,9 @@ function start(){
   function mark(id){
     marked = id || null;
     if(pendingFocus !== marked) pendingFocus = null;
-    selRing.visible = !!marked; chip.hidden = !marked; chipBox = null;
-    chip.textContent = marked === 'zeno' ? 'Zeno' : marked ? A.BY[marked].name : '';
-    DESKS.forEach(dk => { const on = dk.b.id === marked; dk.tag.el.classList.toggle('sel', on); dk.tag.sel = on ? 1 : 0; });
-    zTag.el.classList.toggle('sel', marked === 'zeno'); zTag.sel = marked === 'zeno' ? 1 : 0;
+    selRing.visible = !!marked;   // the bubble turns gold-rimmed and named on the next frame
   }
-  /* each frame: the ring follows the person's feet; the chip sits above the head (and above the desk's "!") */
+  /* each frame: the ring follows the person's feet */
   function markTick(t){
     if(!marked) return;
     const w = where(marked); if(!w) return;
@@ -2208,22 +2212,15 @@ function start(){
     const wave = selRing.userData.wave, k = reduce ? 0 : (t*.8) % 1;
     wave.scale.setScalar(1 + k*.35); wave.material.opacity = .6*(1 - k);
   }
-  function chipTick(){
-    chipBox = null;
-    if(!marked){ return; }
-    const w = where(marked); if(!w) return;
-    _p.set(w.x, w.y + chipY(marked), w.z).project(camera);
-    if(_p.z > 1 || _p.z < -1){ chip.style.visibility = 'hidden'; return; }
-    const x = (_p.x + 1)/2*lastW, y = (1 - _p.y)/2*lastH;
-    chip.style.visibility = ''; chip.style.left = x.toFixed(1) + 'px'; chip.style.top = y.toFixed(1) + 'px';
-    const cw = chip.offsetWidth, ch = chip.offsetHeight;
-    chipBox = {x:x - cw/2, y:y - ch, w:cw, h:ch};
+  /* each bubble as drawn, in stage pixels (for tap picking, and for tests) */
+  function bubbles(){
+    return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
+      w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, activity, focus, follow, mark};
+  A.scene = {where, activity, focus, follow, mark, bubbles};
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
-  const alerts = DESKS.map(dk => dk.alert);
   function frame(){
     requestAnimationFrame(frame);
     if(A.state.covered || document.hidden) return;   // nothing to draw while the full sheet hides the office
@@ -2250,16 +2247,10 @@ function start(){
         }
         c.eyes.scale.y = ((t+ph) % 4.3) < .12 ? .1 : 1;
       });
-      const pulse = ALERT_S + Math.sin(t*5)*.035, p = (t*.7) % 1;
-      alerts.forEach(a => {
-        if(!a.s.visible) return;
-        a.s.scale.setScalar(pulse); a.r.scale.setScalar(ALERT_S + p*.4); a.r.material.opacity = .85*(1-p);
-      });
     }
     markTick(t);
     renderer.render(scene, camera);
-    chipTick();
-    layoutTags();
+    layoutBubbles();
   }
   frame();
   A.ready();
