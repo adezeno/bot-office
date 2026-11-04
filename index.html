@@ -1447,17 +1447,24 @@ function start(){
   box(RX*2+.6, .5, RZ*2+.6, '#c9a57c', 0, -.26, 0, scene, false);   // base slab so the edge reads as solid
 
   const wallM = '#EAD9C8', capM = '#4a3f33';
-  box(RX*2+.6, 1.9, .3, wallM, 0, .95, -RZ-.15);              // back wall
-  box(.3, 1.9, RZ*2, wallM, -RX-.15, .95, 0);                 // left wall
-  box(RX*2+.6, .08, .36, capM, 0, 1.92, -RZ-.15, scene, false);
-  box(.36, .08, RZ*2, capM, -RX-.15, 1.92, 0, scene, false);
+  /* the two tall walls (back and left) drop to the height of the low front and right walls whenever the camera is
+     beyond them, as in The Sims, so the office can be turned all the way round (wallsTick, in the loop). Windows and
+     anything hung on a wall go with it while it is down */
+  const WALL_UP = 1.9, WALL_DOWN = .5;
+  const WALLS = [
+    {id:'back', wall:box(RX*2+.6, WALL_UP, .3, wallM, 0, WALL_UP/2, -RZ-.15), cap:box(RX*2+.6, .08, .36, capM, 0, WALL_UP+.02, -RZ-.15, scene, false),
+     beyond:p => p.z < -RZ, hung:[]},
+    {id:'left', wall:box(.3, WALL_UP, RZ*2, wallM, -RX-.15, WALL_UP/2, 0), cap:box(.36, .08, RZ*2, capM, -RX-.15, WALL_UP+.02, 0, scene, false),
+     beyond:p => p.x < -RX, hung:[]}
+  ];
+  WALLS.forEach(W => { W.h = W.to = WALL_UP; W.cut = false; });
   box(RX*2+.6, .5, .3, wallM, 0, .25, RZ+.15);                // low front wall
   box(.3, .5, RZ*2, wallM, RX+.15, .25, 0);                   // low right wall
   box(RX*2+.6, .06, .36, capM, 0, .52, RZ+.15, scene, false);
   box(.36, .06, RZ*2, capM, RX+.15, .52, 0, scene, false);
   const glassLit = new THREE.MeshStandardMaterial({color:'#fff4d8', emissive:'#ffe7b8', emissiveIntensity:.55, roughness:.4});
-  [1.5, 7.5, 12.5].forEach(x => { box(3.2, .95, .06, glassLit, x, 1.1, -RZ+.02, scene, false); box(3.4, .07, .12, capM, x, .6, -RZ+.05, scene, false); });
-  [-1, 5].forEach(z => { box(.06, .95, 3.2, glassLit, -RX+.02, 1.1, z, scene, false); box(.12, .07, 3.4, capM, -RX+.05, .6, z, scene, false); });
+  [1.5, 7.5, 12.5].forEach(x => WALLS[0].hung.push(box(3.2, .95, .06, glassLit, x, 1.1, -RZ+.02, scene, false), box(3.4, .07, .12, capM, x, .6, -RZ+.05, scene, false)));
+  [-1, 5].forEach(z => WALLS[1].hung.push(box(.06, .95, 3.2, glassLit, -RX+.02, 1.1, z, scene, false), box(.12, .07, 3.4, capM, -RX+.05, .6, z, scene, false)));
 
   function rug(w, d, color, x, z, round){
     const g = round ? new THREE.CylinderGeometry(w/2, w/2, .03, 28) : new THREE.BoxGeometry(w, .03, d);
@@ -1659,7 +1666,7 @@ function start(){
   const plaqueTex = canvasTex(512, 160, g => { g.fillStyle = '#1a1612'; g.fillRect(0,0,512,160); g.strokeStyle = '#C89132'; g.lineWidth = 10; g.strokeRect(8,8,496,144);
     g.fillStyle = '#C89132'; g.textAlign = 'center'; g.font = '800 58px Georgia, serif'; g.fillText('ZENO', 256, 78); g.font = '600 26px Georgia, serif'; g.fillText('FOUNDER · GANA TEGUH', 256, 124); });
   const plq = new THREE.Mesh(new THREE.PlaneGeometry(2.2, .69), new THREE.MeshStandardMaterial({map:plaqueTex, roughness:.4})); plq.position.set(10, 2.1, -RZ+.42); scene.add(plq);
-  box(2.3, .79, .06, gold, 10, 2.1, -RZ+.38);
+  WALLS[0].hung.push(plq, box(2.3, .79, .06, gold, 10, 2.1, -RZ+.38));   // the plaque hangs on the back wall
   // executive high-back chair
   box(.66, .9, .1, '#3b0a18', 0, 1.25, -.3, Z.chair); box(.7, .08, .14, gold, 0, 1.72, -.3, Z.chair, false);
   // trophy + nameplate + laptop on desk
@@ -1906,7 +1913,7 @@ function start(){
   const cam = createMapCam({
     camera, el: stage, canvas: renderer.domElement, buttons: camctl, reduce,
     room: {x0: -RX + 1.5, x1: RX - 1.5, z0: -RZ + 1.5, z1: RZ - 1.5},   // where the middle of the view may go
-    azMin: -1.1, azMax: 1.6,   // from front-left round to side-on: the tall back and left walls stay behind the view
+    azMin: -Infinity, azMax: Infinity,   // all the way round: the tall back and left walls drop when the camera passes them
     homeTarget: [0, -.6], homeAzs: [.42, Math.PI/2],
     fitPoints: [[-RX,0,RZ],[RX,0,RZ],[-RX,0,-RZ],[RX,0,-RZ],[-RX,1.9,-RZ],[RX,1.9,-RZ],[-RX,1.9,RZ],[10,2.45,-RZ+.4]],
     viewRect: () => stageRects().view, freeRect: () => stageRects().free, topInset: 56,
@@ -2225,7 +2232,7 @@ function start(){
     if(A.sheet.get() === 'full'){ pendingFocus = id; return; }
     pendingFocus = null;
     const w = where(id); if(!w) return;
-    const az = Math.max(-.95, Math.min(.95, cam.state().az));
+    const a = cam.state().az, az = Math.max(-.95, Math.min(.95, Math.atan2(Math.sin(a), Math.cos(a))));   // faces: within 0.95 rad of front-on, whichever way round
     cam.frame([w.x, w.z, w.y], Object.assign({dist:id === 'zeno' ? 13 : 10, az, tilt:0}, figure(id)), ms);   // Zeno stands, the team sits
   }
   function follow(id){
@@ -2244,12 +2251,27 @@ function start(){
     const wave = selRing.userData.wave, k = reduce ? 0 : (t*.8) % 1;
     wave.scale.setScalar(1 + k*.35); wave.material.opacity = .6*(1 - k);
   }
+  /* each frame: a tall wall the camera has gone beyond drops to the low walls' height (about 300 ms, at once with
+     reduced motion) and rises again when the camera comes back. Phones bake their shadows, so they re-bake once it settles */
+  function wallsTick(dt){
+    WALLS.forEach(W => {
+      const cut = W.beyond(camera.position);
+      if(cut !== W.cut){ W.cut = cut; W.to = cut ? WALL_DOWN : WALL_UP; }
+      if(W.h === W.to) return;
+      const step = reduce ? 1e9 : dt*4.7;   // 1.4 m in 300 ms
+      W.h = W.h < W.to ? Math.min(W.to, W.h + step) : Math.max(W.to, W.h - step);
+      W.wall.scale.y = W.h/WALL_UP; W.wall.position.y = W.h/2; W.cap.position.y = W.h + .02;
+      W.hung.forEach(m => { m.visible = W.h > WALL_UP - .05; });
+      if(W.h === W.to && smallScreen) renderer.shadowMap.needsUpdate = true;
+    });
+  }
+  function walls(){ return WALLS.map(W => ({id:W.id, h:W.h, cut:W.cut})); }
   /* each bubble as drawn, in stage pixels (for tap picking, and for tests) */
   function bubbles(){
     return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
       w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, activity, focus, follow, mark, bubbles, capsules};
+  A.scene = {where, activity, focus, follow, mark, bubbles, capsules, walls};
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
@@ -2261,6 +2283,7 @@ function start(){
     zenoTick(t);
     if(!reduce) idleTick(t, _dt);
     cam.update(performance.now());
+    wallsTick(_dt);
     doHover();
     if(!reduce){
       DESKS.forEach(dk => {
@@ -2374,6 +2397,7 @@ function createMapCam(o){
      Reduced motion: cut straight to the end. */
   function glide(end, ms, P){
     stop(); end = limit(Object.assign(snap(), end));
+    const da = end.az - s.az; end.az = s.az + Math.atan2(Math.sin(da), Math.cos(da));   // turning goes all the way round: take the short way
     if(o.reduce || !ms){ Object.assign(s, end); apply(); return; }
     let a = null, b = null;
     if(P){
