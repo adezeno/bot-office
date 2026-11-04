@@ -1972,7 +1972,7 @@ function start(){
   const HB = ['zeno'].concat(A.BOTS.map(b => b.id)).map(id => {
     const el = document.createElement('div'); el.className = 'hb'; el.dataset.person = id; el.setAttribute('aria-hidden', 'true');
     labels.appendChild(el);
-    return {id, el, key:'', data:null, dim:false, big:false, w:0, h:0, x:NaN, y:NaN, tx:NaN, box:null, shown:false, dot:false, named:false, ax:0, ay:0, depth:0, rank:3, body:null};
+    return {id, el, key:'', data:null, dim:false, big:false, w:0, h:0, x:NaN, y:NaN, tx:NaN, dx:0, box:null, shown:false, dot:false, named:false, ax:0, ay:0, depth:0, rank:3, body:null};
   });
   const HBY = {}; HB.forEach(B => { HBY[B.id] = B; });
   const pv = new THREE.Vector3();
@@ -1992,6 +1992,7 @@ function start(){
   }
   function showB(B, r, dot){
     if(dot !== B.dot){ B.dot = dot; B.el.classList.toggle('dot', dot); }
+    B.dx = r.dx || 0;
     const x = Math.round(r.x), y = Math.round(r.y), tx = dot ? 0 : Math.round(Math.max(8 - B.w/2, Math.min(B.w/2 - 8, B.ax - (x + B.w/2))));
     if(x !== B.x || y !== B.y){ B.el.style.transform = 'translate(' + x + 'px,' + y + 'px)'; B.x = x; B.y = y; }
     if(tx !== B.tx){ B.el.style.setProperty('--tx', tx + 'px'); B.tx = tx; }
@@ -2000,7 +2001,7 @@ function start(){
   }
   function layoutBubbles(){
     const W = lastW, H = lastH; if(!W || !H) return;
-    const items = [], bodies = [];
+    const items = [], bodies = [], away = new Set(walkers.map(w => w.dk.b.id));
     for(const B of HB){
       const w = where(B.id); if(!w || !B.data){ hideB(B); continue; }
       pv.set(w.x, w.y + BUB_Y(B.id), w.z).project(camera);
@@ -2010,7 +2011,7 @@ function start(){
       pv.set(w.x, w.y + HEAD_TOP(B.id), w.z).project(camera); const tall = fy - (1 - pv.y)/2*H;
       B.big = B.big ? tall >= NAME_OFF : tall >= NAME_ON;
       B.body = {x:fx - tall*.28, y:fy - tall, w:tall*.56, h:Math.max(2, tall)};
-      bodies.push(B);
+      if(B.id !== 'zeno' && !away.has(B.id)) bodies.push(B);   // someone walking past doesn't push bubbles about
       if(B.ax < -100 || B.ax > W + 100 || B.ay < -100 || B.ay > H + 100){ hideB(B); continue; }
       paintB(B, B.big || B.id === marked || B.id === hoverId);
       B.depth = camera.position.distanceToSquared(pv.set(w.x, w.y, w.z));
@@ -2024,7 +2025,8 @@ function start(){
     const clear = r => inView(r) && !hit(r, obstacles);
     for(const B of items){
       const n = Math.max(0, B.w/2 - 9), others = bodies.filter(o => o !== B).map(o => o.body);
-      const tries = [0, -n, n].map(dx => ({x:B.ax - B.w/2 + dx, y:B.ay - TAIL - B.h, w:B.w, h:B.h}));
+      const last = B.shown && !B.dot && Math.abs(B.dx) <= n ? [B.dx] : [];   // stay put while the last spot still works
+      const tries = last.concat([0, -n, n]).map(dx => ({x:B.ax - B.w/2 + dx, y:B.ay - TAIL - B.h, w:B.w, h:B.h, dx}));
       const free = r => clear(r) && !hit(r, placed);
       let r = tries.find(t => free(t) && !hit(t, others)) || tries.find(free), dot = false;
       if(!r && B.rank < 3) r = tries.find(clear);   // never crowded out: drawn over its neighbour instead
@@ -2040,13 +2042,43 @@ function start(){
   A.onChange(kind => { if(kind === 'data') refresh(); else if(kind === 'tab') resize(); else if(kind === 'sheet') sheetMoved(); else if(kind === 'follow') measureObstacles(); });
   refresh();
 
-  /* ---------- picking ---------- */
+  /* ---------- picking ----------
+     A tap picks what is drawn under the finger. A head bubble is drawn over the office, so inside one (or its tail) it
+     picks that bubble's person: the top one where bubbles overlap. Anywhere else the nearest thing in the office wins:
+     a person's hit capsule, a sticky note, a desk. The capsule is an invisible 0.8 m-wide pill round each person, from
+     the floor to their bubble's tail, moving with them: a tap on someone, or just beside them, picks them however small
+     they are drawn. Bubbles never take touches themselves (no buttons over the office). */
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  const CAPS = [];
+  function addCapsule(parent, id, top){
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(.4, top - .8, 4, 8), new THREE.MeshBasicMaterial());
+    m.visible = false; m.position.set(0, top/2, 0); m.userData.pick = id === 'zeno' ? {person:'zeno'} : {bot:id}; m.userData.top = top;
+    parent.add(m); CAPS.push(m);
+  }
+  DESKS.forEach(dk => addCapsule(dk.c.root, dk.b.id, BUB_Y(dk.b.id)));
+  addCapsule(ZC.g, 'zeno', BUB_Y('zeno'));
+  const _cw = new THREE.Vector3();
+  function capsules(){
+    return CAPS.map(m => { m.getWorldPosition(_cw); const p = m.userData.pick;
+      return {id:p.person || p.bot, x:_cw.x, y:_cw.y, z:_cw.z, r:.4, top:_cw.y + m.userData.top/2}; });
+  }
+  function bubbleAt(x, y){
+    let best = null, bz = -1;
+    HB.forEach((B, i) => {
+      const b = B.box; if(!B.shown || !b) return;
+      if(x < b.x - 3 || x > b.x + b.w + 3 || y < b.y - 3 || y > b.y + b.h + (B.dot ? 3 : TAIL)) return;
+      const z = (B.id === marked ? 3 : B.data.kind === 'need' || B.id === 'zeno' ? 2 : 1)*100 + i;   // as stacked on screen
+      if(z > bz){ bz = z; best = B; }
+    });
+    return best;
+  }
   function pickAt(cx, cy){
     const r = renderer.domElement.getBoundingClientRect();
+    const B = bubbleAt(cx - r.left, cy - r.top);
+    if(B) return B.id === 'zeno' ? {person:'zeno'} : {bot:B.id};
     ptr.set(((cx-r.left)/r.width)*2-1, -((cy-r.top)/r.height)*2+1);
     ray.setFromCamera(ptr, camera);
-    const hit = ray.intersectObjects(notePicks.concat(staticPicks), false)[0];
+    const hit = ray.intersectObjects(CAPS.concat(notePicks, staticPicks), false)[0];
     return hit ? hit.object.userData.pick : null;
   }
   /* taps come from the camera rig (onTap), so a drag never opens anything */
@@ -2217,7 +2249,7 @@ function start(){
     return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
       w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, activity, focus, follow, mark, bubbles};
+  A.scene = {where, activity, focus, follow, mark, bubbles, capsules};
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
