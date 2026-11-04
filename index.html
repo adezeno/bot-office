@@ -1657,12 +1657,24 @@ function start(){
     return {g, mon, screenM, W, Dp, chair:ch};
   }
 
+  /* each bot is a small rig: root (on the floor at the seat, turned to face where they walk) -> hips -> knees for the
+     legs, and body (raised RISE when standing) -> head -> eyes, shoulders -> elbows for the arms. Seated, the thighs
+     reach forward over the chair and the shins hang to the floor, the forearms rest on the keyboard: the look the office
+     has always had. Standing, everything hangs straight; walking swings the legs and arms (poseBot, below) */
+  const HIP_SIT = .58, HIP_STAND = .78, RISE = HIP_STAND - HIP_SIT;   // standing hips as high as Zeno's
+  const THIGH = .32, SIT_HIP = -(Math.PI/2 - Math.asin((HIP_SIT - .46)/THIGH));   // seated, the knees a little below the hips
   function buildChar(b, parent){
     const root = new THREE.Group(); root.position.set(0, 0, -.9); parent.add(root);
     const pants = '#3a3330';
-    box(.17, .14, .5, pants, -.12, .58, .12, root); box(.17, .14, .5, pants, .12, .58, .12, root);
-    box(.15, .46, .15, pants, -.12, .3, .36, root); box(.15, .46, .15, pants, .12, .3, .36, root);
-    box(.16, .08, .24, '#1a1612', -.12, .04, .42, root); box(.16, .08, .24, '#1a1612', .12, .04, .42, root);
+    const leg = x => {
+      const hip = new THREE.Group(); hip.position.set(x, HIP_SIT, -.05); root.add(hip);
+      box(.17, .40, .14, pants, 0, -.14, 0, hip);                              // thigh, hip to knee
+      const knee = new THREE.Group(); knee.position.set(0, -THIGH, 0); hip.add(knee);
+      box(.15, .43, .15, pants, 0, -.185, 0, knee);                            // shin
+      box(.16, .08, .24, '#1a1612', 0, -.42, .06, knee);                       // shoe, its sole on the floor
+      return {hip, knee};
+    };
+    const L = leg(-.12), Rg = leg(.12);
     const body = new THREE.Group(); root.add(body);
     mesh(new THREE.CylinderGeometry(.24, .33, .62, 7), b.color, 0, .84, 0, body);
     const v = box(.13, .13, .02, '#ffffff', 0, 1.06, .25, body, false); v.rotation.z = Math.PI/4;
@@ -1684,13 +1696,18 @@ function start(){
       box(.5, .62, .14, b.hair, 0, -.22, -.2, head);
       box(.12, .5, .12, b.hair, -.23, -.17, -.05, head); box(.12, .5, .12, b.hair, .23, -.17, -.05, head);
       [-.085, .085].forEach(xx => { const l = box(.07, .012, .012, '#1a1612', xx + (xx<0?-.02:.02), .065, .232, head, false); l.rotation.z = xx<0 ? .3 : -.3; });
-      mesh(new THREE.CylinderGeometry(.3, .42, .26, 9), b.color, 0, .56, .04, root);
+      mesh(new THREE.CylinderGeometry(.3, .42, .26, 9), b.color, 0, .56, .04, body);   // rides up with her hips when she stands
       ball(.022, '#f2c94c', -.25, -.06, .02, head, false); ball(.022, '#f2c94c', .25, -.06, .02, head, false);
     }
-    const ua = box(.12, .36, .12, b.color, -.33, .92, .08, body); ua.rotation.x = -.5;
-    const ub = box(.12, .36, .12, b.color, .33, .92, .08, body); ub.rotation.x = -.5;
-    box(.1, .1, .42, b.color, -.27, .8, .34, body); box(.1, .1, .42, b.color, .27, .8, .34, body);
-    const handL = ball(.07, b.skin, -.2, .83, .56, root, true, 1), handR = ball(.07, b.skin, .2, .83, .56, root, true, 1);
+    const arm = x => {
+      const sh = new THREE.Group(); sh.position.set(x, 1.08, 0); body.add(sh);
+      box(.12, .36, .12, b.color, 0, -.16, 0, sh);                             // upper arm
+      const el = new THREE.Group(); el.position.set(0, -.33, 0); sh.add(el);
+      box(.1, .42, .1, b.color, 0, -.19, 0, el);                               // forearm
+      ball(.07, b.skin, 0, -.43, 0, el, true, 1);                              // hand
+      return {sh, el};
+    };
+    const AL = arm(-.33), AR = arm(.33);
     const ink = '#1a1612';
     switch(b.acc){
       case 'turtleneck': cyl(.13, .15, .15, 8, '#1d1d24', 0, 1.15, 0, body); break;
@@ -1718,9 +1735,30 @@ function start(){
         box(.3, .025, .22, '#8f0b20', 0, .04, .3, head); ball(.03, '#ffffff', 0, .3, 0, head, false); break;
       case 'bun': ball(.1, b.hair, 0, .28, -.08, head, true, 1); break;
     }
-    return {root, body, head, eyes, handL, handR};
+    const c = {root, body, head, eyes, hipL:L.hip, kneeL:L.knee, hipR:Rg.hip, kneeR:Rg.knee, shL:AL.sh, elL:AL.el, shR:AR.sh, elR:AR.el,
+      stand:0, ph:0, amp:0};
+    poseBot(c, {t:0, ph:0});
+    return c;
   }
-
+  const lerp = (a, b, k) => a + (b - a)*k;
+  const ease = k => k*k*(3 - 2*k);
+  /* the bot's pose: c.stand 0 seated .. 1 standing, c.ph the stride phase, c.amp how much of a stride (0 standing still);
+     o.t and o.ph drive the seated micro-life (typing, nodding, looking round, blinking), o.kick a keepy-up, o.read the paper */
+  function poseBot(c, o){
+    const s = c.stand, sw = Math.sin(c.ph)*c.amp, t = o.t, ph = o.ph || 0, seated = 1 - s;
+    const hipY = lerp(HIP_SIT, HIP_STAND, s);
+    c.hipL.position.y = c.hipR.position.y = hipY;
+    c.hipL.rotation.x = SIT_HIP*seated + .5*sw;
+    c.hipR.rotation.x = SIT_HIP*seated - .5*sw - (o.kick || 0);
+    c.kneeL.rotation.x = -SIT_HIP*seated + .7*c.amp*Math.max(0, -Math.cos(c.ph));
+    c.kneeR.rotation.x = -SIT_HIP*seated + .7*c.amp*Math.max(0, Math.cos(c.ph)) + (o.kick || 0)*.4;
+    c.body.position.y = RISE*s + .015*c.amp*Math.cos(2*c.ph) + (o.bob || 0);
+    const type = o.typing ? Math.max(0, Math.sin(t*16+ph))*.08 : 0, type2 = o.typing ? Math.max(0, Math.sin(t*16+ph+Math.PI))*.08 : 0;
+    c.shL.rotation.set(-.5*seated - .4*sw - (o.read || 0), 0, 0);
+    c.shR.rotation.set(-.5*seated + .4*sw - (o.read || 0), 0, 0);
+    c.elL.rotation.set(lerp(-1.17, -.28, s) - type*seated - (o.read || 0)*.7, 0, .31*seated);
+    c.elR.rotation.set(lerp(-1.17, -.28, s) - type2*seated - (o.read || 0)*.7, 0, -.31*seated);
+  }
   const DESKS = [];
   A.BOTS.forEach(b => {
     const p = POS[b.id]; if(!p) return;
@@ -1809,9 +1847,13 @@ function start(){
     return {g, legL, legR, armL, armR, body, putter, ballG, pb};
   })();
   const floorY = (x, z) => (x > FO.x0 && x < FO.x1 && z < FO.z1 && z > FO.z0) ? .12 : 0;
-  /* ---------- walkable navmesh: grid + A*, so nobody walks through walls, glass or furniture ---------- */
-  const NAV = (function(){
-    const C = .25, R = .32, X0 = -RX, Z0 = -RZ, NX = Math.round(2*RX/C), NZ = Math.round(2*RZ/C);
+  /* ---------- walkable navmesh: grid + A*, so nobody walks through walls, glass or furniture ----------
+     A 0.25 m grid over the room; a cell is open when its centre keeps R clear of every obstacle (each rect grown by R).
+     find() runs A* on it (a binary heap: fast enough to plan in the frame), then pulls the path tight with an exact
+     line-of-sight test that keeps CLEAR from every obstacle. A start inside a block (a seat at its desk) keeps its way
+     out as the first waypoint; a target that isn't open floor ends at the open spot nearest it; no path at all is null,
+     never a straight line through the furniture. */
+  function officeRects(){
     const solid = [];   // raw obstacle rects [x0,z0,x1,z1]
     const rect = (x0,z0,x1,z1) => solid.push([Math.min(x0,x1),Math.min(z0,z1),Math.max(x0,x1),Math.max(z0,z1)]);
     const T = .1;
@@ -1822,97 +1864,154 @@ function start(){
     // desks (+ chair behind each)
     const desk = (x, z, big) => { const W = big ? 2.7 : 2.0, D = big ? 1.2 : 1.0; rect(x-W/2-.05, z-1.35, x+W/2+.05, z+D/2+.05); };
     Object.values(POS).forEach(p => desk(p.x, p.z, p.big)); desk(10, -7.4, true);
-    // furniture
-    rect(9, 9.3, 12, 10.5); rect(9.8, 7.8, 11.2, 9.2); rect(13.9, 3.2, 14.5, 3.8); rect(-4.85, -RZ, -1.15, -RZ+.65); rect(GREEN.hx-.1, GREEN.hz-.15, GREEN.hx+.5, GREEN.hz+.15);   // cooler, whiteboard, putting flag rect(-14.7, -7.7, -13.7, -5.5);
+    // furniture: lounge sofa and table, cooler, whiteboard, putting flag, Steve's sofa, shelves, plants (+ coffee machine)
+    rect(9, 9.3, 12, 10.5); rect(9.8, 7.8, 11.2, 9.2); rect(13.9, 3.2, 14.5, 3.8); rect(-4.85, -RZ, -1.15, -RZ+.65); rect(GREEN.hx-.1, GREEN.hz-.15, GREEN.hx+.5, GREEN.hz+.15);
+    rect(-14.7, -7.7, -13.7, -5.5);
     rect(-13.9, -10.95, -11.3, -10.1); rect(11.5, -10.95, 14.1, -10.1); rect(2.1, -10.95, 4.3, -10.1);
     [[-14.2,-10.2],[-7.6,-4.6],[14.2,-10.2],[-14.2,10.1],[14.2,6.5],[5.6,-10.3],[7.4,-10.2],[14.3,-4.4]].forEach(([x,z]) => rect(x-.35, z-.35, x+.35, z+.35));
-    const grid = new Uint8Array(NX*NZ);
+    return solid;
+  }
+  function navmesh(solid){
+    const C = .25, R = .32, CLEAR = .3, X0 = -RX, Z0 = -RZ, NX = Math.round(2*RX/C), NZ = Math.round(2*RZ/C), N = NX*NZ;
+    const grid = new Uint8Array(N);
     const cx = i => X0 + (i+.5)*C, cz = j => Z0 + (j+.5)*C;
-    const hit = (x, z, r) => x < X0+.35+r-.32 || x > -X0-.35-r+.32 || z < Z0+.35+r-.32 || z > -Z0-.35-r+.32 ||
-      solid.some(s => x > s[0]-r && x < s[2]+r && z > s[1]-r && z < s[3]+r);
+    const wall = (x, z, r) => x < X0+.35+r-.32 || x > -X0-.35-r+.32 || z < Z0+.35+r-.32 || z > -Z0-.35-r+.32;
+    const hit = (x, z, r) => wall(x, z, r) || solid.some(s => x > s[0]-r && x < s[2]+r && z > s[1]-r && z < s[3]+r);
     for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++) grid[j*NX+i] = hit(cx(i), cz(j), R) ? 1 : 0;
-    const cell = (x, z) => [Math.max(0,Math.min(NX-1,Math.floor((x-X0)/C))), Math.max(0,Math.min(NZ-1,Math.floor((z-Z0)/C)))];
+    const ci = x => Math.max(0, Math.min(NX-1, Math.floor((x-X0)/C))), cj = z => Math.max(0, Math.min(NZ-1, Math.floor((z-Z0)/C)));
     const free = (i, j) => i>=0 && j>=0 && i<NX && j<NZ && !grid[j*NX+i];
-    function nearestFree(i, j){ if(free(i,j)) return [i,j];
-      for(let r=1;r<40;r++) for(let a=-r;a<=r;a++) for(const [u,v] of [[i+a,j-r],[i+a,j+r],[i-r,j+a],[i+r,j+a]]) if(free(u,v)) return [u,v];
-      return [i,j]; }
-    function los(ax, az, bx, bz){ const d = Math.hypot(bx-ax, bz-az), n = Math.ceil(d/(C*.4));
-      for(let k=0;k<=n;k++){ const [i,j] = cell(ax+(bx-ax)*k/n, az+(bz-az)*k/n); if(!free(i,j)) return false; } return true; }
+    /* the open cell whose centre is nearest the point (rings outwards, until no farther ring can hold a nearer one) */
+    function nearestFree(x, z){
+      const i = ci(x), j = cj(z); if(free(i,j)) return j*NX+i;
+      let best = -1, bd = Infinity;
+      const try1 = (u, v) => { if(!free(u, v)) return; const d = Math.hypot(cx(u)-x, cz(v)-z); if(d < bd){ bd = d; best = v*NX+u; } };
+      for(let r=1;r<40 && (r-1)*C < bd;r++) for(let a=-r;a<=r;a++){ try1(i+a,j-r); try1(i+a,j+r); if(a > -r && a < r){ try1(i-r,j+a); try1(i+r,j+a); } }
+      return best; }
+    /* does the segment keep CLEAR from every obstacle (and stay inside the walls)? Slab test per grown rect */
+    function clear(ax, az, bx, bz){
+      if(wall(ax, az, CLEAR) || wall(bx, bz, CLEAR)) return false;   // the room is a box: both ends inside, all inside
+      const dx = bx-ax, dz = bz-az;
+      for(const s of solid){
+        const x0 = s[0]-CLEAR, z0 = s[1]-CLEAR, x1 = s[2]+CLEAR, z1 = s[3]+CLEAR;
+        let t0 = 0, t1 = 1;
+        if(Math.abs(dx) < 1e-9){ if(ax <= x0 || ax >= x1) continue; }
+        else { let u = (x0-ax)/dx, v = (x1-ax)/dx; if(u > v){ const w = u; u = v; v = w; } if(u > t0) t0 = u; if(v < t1) t1 = v; if(t0 >= t1) continue; }
+        if(Math.abs(dz) < 1e-9){ if(az <= z0 || az >= z1) continue; }
+        else { let u = (z0-az)/dz, v = (z1-az)/dz; if(u > v){ const w = u; u = v; v = w; } if(u > t0) t0 = u; if(v < t1) t1 = v; if(t0 >= t1) continue; }
+        return false;
+      }
+      return true;
+    }
+    // A* state, allocated once: g cost, parent, closed set, and a binary heap of (f, cell) with lazy duplicates
+    const g = new Float32Array(N), from = new Int32Array(N), done = new Uint8Array(N);
+    const HN = N*8, hk = new Float32Array(HN), hv = new Int32Array(HN); let hn = 0;
+    function push(k, v){ if(hn >= HN) return; let i = hn++; while(i > 0){ const q = (i-1) >> 1; if(hk[q] <= k) break; hk[i] = hk[q]; hv[i] = hv[q]; i = q; } hk[i] = k; hv[i] = v; }
+    function pop(){ const v = hv[0], k = hk[--hn], w = hv[hn]; let i = 0;
+      for(;;){ let c = 2*i+1; if(c >= hn) break; if(c+1 < hn && hk[c+1] < hk[c]) c++; if(hk[c] >= k) break; hk[i] = hk[c]; hv[i] = hv[c]; i = c; }
+      if(hn){ hk[i] = k; hv[i] = w; } return v; }
     function find(ax, az, bx, bz){
-      const s = nearestFree(...cell(ax, az)), e = nearestFree(...cell(bx, bz));
-      const S = s[1]*NX+s[0], E = e[1]*NX+e[0];
-      const g = new Float32Array(NX*NZ).fill(1e9), from = new Int32Array(NX*NZ).fill(-1), done = new Uint8Array(NX*NZ);
-      const open = [S]; g[S] = 0; const hh = k => Math.hypot(k%NX-e[0], ((k/NX)|0)-e[1]);
-      while(open.length){
-        let bi = 0; for(let q=1;q<open.length;q++) if(g[open[q]]+hh(open[q]) < g[open[bi]]+hh(open[bi])) bi = q;
-        const k = open[bi]; open[bi] = open[open.length-1]; open.pop();
-        if(k === E) break; if(done[k]) continue; done[k] = 1;
+      const S = nearestFree(ax, az), E = nearestFree(bx, bz);
+      if(S < 0 || E < 0) return null;
+      const ei = E%NX, ej = (E/NX)|0;
+      const hh = k => { const di = Math.abs(k%NX - ei), dj = Math.abs(((k/NX)|0) - ej); return di + dj - .586*Math.min(di, dj); };   // octile
+      g.fill(Infinity); from.fill(-1); done.fill(0); hn = 0;
+      g[S] = 0; push(hh(S), S);
+      while(hn){
+        const k = pop(); if(done[k]) continue; done[k] = 1;
+        if(k === E) break;
         const i = k%NX, j = (k/NX)|0;
         for(let dj=-1;dj<=1;dj++) for(let di=-1;di<=1;di++){ if(!di && !dj) continue;
           const u = i+di, v = j+dj; if(!free(u,v)) continue;
           if(di && dj && (!free(i+di,j) || !free(i,j+dj))) continue;   // no corner cutting
-          const n = v*NX+u, ng = g[k] + (di && dj ? 1.414 : 1);
-          if(ng < g[n]){ g[n] = ng; from[n] = k; open.push(n); } }
+          const n = v*NX+u; if(done[n]) continue;
+          const ng = g[k] + (di && dj ? 1.414 : 1);
+          if(ng < g[n]){ g[n] = ng; from[n] = k; push(ng + hh(n), n); } }
       }
-      if(from[E] < 0 && E !== S) return [[bx, bz]];
-      const pts = []; for(let k=E; k!==-1; k=from[k]) pts.unshift([cx(k%NX), cz((k/NX)|0)]);
-      pts[0] = free(...cell(ax,az)) ? [ax, az] : pts[0]; 
-      if(free(...cell(bx,bz))) pts[pts.length-1] = [bx, bz];
-      const out = [pts[0]]; let a = 0;   // string-pull: keep only corners we can't see past
-      while(a < pts.length-1){ let b = pts.length-1; while(b > a+1 && !los(pts[a][0],pts[a][1],pts[b][0],pts[b][1])) b--; out.push(pts[b]); a = b; }
-      return out.slice(1);
+      if(E !== S && from[E] < 0) return null;   // walled off: no path, so nobody walks straight through instead
+      const pts = []; for(let k=E; k!==-1; k=from[k]) pts.push([cx(k%NX), cz((k/NX)|0)]);
+      pts.reverse(); if(pts.length === 1) pts.push(pts[0]);   // start and end in one cell: still two points
+      const startOpen = !hit(ax, az, R);
+      if(startOpen) pts[0] = [ax, az];                         // from where the walker stands
+      if(!hit(bx, bz, R)) pts[pts.length-1] = [bx, bz];        // the target itself, when it keeps R clear (S-7)
+      const out = [pts[0]]; let a = 0;   // pull tight: from each corner, on as far as the straight line stays clear
+      while(a < pts.length-1){ let b = a+1; while(b+1 < pts.length && clear(pts[a][0], pts[a][1], pts[b+1][0], pts[b+1][1])) b++; out.push(pts[b]); a = b; }
+      return startOpen ? out.slice(1) : out;   // a start inside a block keeps its way out (the old path dropped it)
     }
-    // true inside a real obstacle (no inflation) — used by the self-check
+    // true inside a real obstacle (no inflation): for checks
     const inside = (x, z) => hit(x, z, 0);
-    return {find, inside, free:(x,z)=>free(...cell(x,z)), rects:solid};
-  })();
-  // idle loop: every stop is open floor; legs between stops are pathfound
-  const ROUTE = [[8,-5.4],[GREEN.x,GREEN.z,'putt'],[-1,-3.1],[-7.5,-3.1],[-7.5,2.2],[2.5,2.2,'look'],[12.6,2.2],[12.8,-3.15,'coffee'],[12.8,-5.2]];
-  const CHAIR = new THREE.Vector3(); 
-  const zs = {mode:'walk', i:0, x:8, z:-5.4, timer:0, path:[], onArrive:null, leg:null, bad:0, maxBad:0};
+    return {find, inside, clear, free:(x,z)=>free(ci(x),cj(z)), open:(x,z)=>!hit(x,z,R), rects:solid};
+  }
+  const NAV = navmesh(officeRects());
+  NAV.make = navmesh;   // a navmesh over other obstacles (checks)
+  // idle loop: every stop is open floor; legs between stops are pathfound. The coffee stop is beside Miko's desk, out of
+  // line with the 1.4 m connecting door her coffee run uses (S-8)
+  const ROUTE = [[8,-5.4],[GREEN.x,GREEN.z,'putt'],[-1,-3.1],[-7.5,-3.1],[-7.5,2.2],[2.5,2.2,'look'],[12.6,2.2],[11.6,-3.15,'coffee'],[12.8,-5.2]];
+  const CHAIR = new THREE.Vector3();
+  const zs = {mode:'walk', i:0, x:8, z:-5.4, timer:0, path:[], onArrive:null, leg:null, bad:0, maxBad:0, stand:1, ph:0, amp:0, k:0, wait:0};
   window.zenoNav = zs; window.zenoNAV = NAV; window.zenoROUTE = ROUTE;
   ZC.g.position.set(zs.x, .12, zs.z);
+  const Z_STRIDE = .62, Z_TURN = 7, SIT_SECS = .5;   // a step is 0.62 m; turns at up to 7 rad/s; half a second to sit or stand
+  const sideX = () => 10 + Z.W/2 + .45;               // beside his desk, level with the chair
   function goTo(path, onArrive){ zs.path = path.slice(); zs.mode = 'go'; zs.onArrive = onArrive; ZC.putter.visible = false; ZC.ballG.visible = false; }
+  /* to his chair: round to the side of the desk, then sideways in front of the chair (never through its back) */
   function chairPath(){
     Z.chair.updateMatrixWorld(true); Z.chair.getWorldPosition(CHAIR);
-    return NAV.find(zs.x, zs.z, CHAIR.x, CHAIR.z-.75).concat([[CHAIR.x, CHAIR.z]]);   // walk round behind the desk, then slide into the chair
+    const p = NAV.find(zs.x, zs.z, sideX(), CHAIR.z);
+    return p && p.concat([[CHAIR.x, CHAIR.z]]);
   }
   window.zenoSit = function(cb){
     if(zs.mode === 'sit'){ cb && cb(); return; }
-    goTo(chairPath(), () => { zs.mode = 'sit'; cb && cb(); });
+    if(zs.mode === 'sitdown' || zs.mode === 'rise'){ zs.mode = 'sitdown'; zs.onArrive = cb; return; }   // back down from where he is
+    const p = chairPath();
+    if(!p){ cb && cb(); return; }   // no way round to the chair: the desk opens anyway, he stays where he is
+    goTo(p, cb);
   };
-  window.zenoStand = function(){ window.zenoPC && window.zenoPC(false); if(zs.mode === 'go'){ zs.path = []; zs.onArrive = null; zs.mode = 'walk'; zs.leg = null; return; } if(zs.mode !== 'sit') return; Z.chair.getWorldPosition(CHAIR); zs.x = 10 + Z.W/2 + .45; zs.z = CHAIR.z; zs.mode = 'walk'; zs.i = 0; zs.leg = null; ZC.legL.rotation.x = ZC.legR.rotation.x = 0; ZC.armL.rotation.x = ZC.armR.rotation.x = 0; };
+  window.zenoStand = function(){
+    window.zenoPC && window.zenoPC(false);
+    if(zs.mode === 'go'){ zs.path = []; zs.onArrive = null; zs.mode = 'walk'; zs.leg = null; return; }
+    if(zs.mode === 'sit' || zs.mode === 'sitdown'){ zs.mode = 'rise'; zs.onArrive = null; }
+  };
   window.zenoSeated = () => zs.mode === 'sit';
   window.zenoPC = on => { Z.screenM.emissive.set(on ? '#7fe0ff' : '#000000'); Z.screenM.emissiveIntensity = on ? .7 : 0; };
   function legPose(a){ ZC.legL.rotation.x = a; ZC.legR.rotation.x = -a; ZC.armL.rotation.x = -a*.8; ZC.armR.rotation.x = a*.8; }
+  /* turn towards a heading at no more than Z_TURN rad/s, the short way round */
+  function turnZ(want, dt){ let dr = want - ZC.g.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); ZC.g.rotation.y += Math.sign(dr)*Math.min(Math.abs(dr), Math.abs(dr)*Math.min(1, dt*10), Z_TURN*dt); return dr; }
   let zLast = 0;
   function zenoTick(t){
     const dt = Math.min(.05, t - zLast); zLast = t;
     ZC.pb.rotation.y = t*1.5; ZC.pb.position.y = Math.sin(t*2)*.04;
     const SPEED = zs.mode === 'go' ? 2.6 : 1.3;
-    let target = null;
-    if(zs.mode === 'go') target = zs.path[0];
+    let target = null, moved = 0;
+    if(zs.wait > 0) zs.wait -= dt;
+    else if(zs.mode === 'go') target = zs.path[0];
     else if(zs.mode === 'walk'){
-      if(!zs.leg) zs.leg = NAV.find(zs.x, zs.z, ROUTE[zs.i][0], ROUTE[zs.i][1]);
-      target = zs.leg[0] || ROUTE[zs.i];
+      if(!zs.leg){
+        zs.leg = NAV.find(zs.x, zs.z, ROUTE[zs.i][0], ROUTE[zs.i][1]);
+        if(!zs.leg){ zs.i = (zs.i+1) % ROUTE.length; zs.wait = 1; }   // no way there now: on to the next stop shortly
+      }
+      target = zs.leg && (zs.leg[0] || ROUTE[zs.i]);
     }
     if(target){
       const dx = target[0]-zs.x, dz = target[1]-zs.z, d = Math.hypot(dx, dz);
       if(d < .06){
         zs.x = target[0]; zs.z = target[1];
-        if(zs.mode === 'go'){ zs.path.shift(); if(!zs.path.length){ const f = zs.onArrive; zs.mode = 'sit'; f && f(); } }
+        if(zs.mode === 'go'){ zs.path.shift(); if(!zs.path.length){ zs.mode = 'sitdown'; zs.k = 0; } }
         else { zs.leg.shift(); if(!zs.leg.length){ const stop = ROUTE[zs.i]; zs.leg = null; zs.i = (zs.i+1) % ROUTE.length; if(stop[2]){ zs.mode = stop[2]; zs.timer = 0; } } }
       } else {
-        const s = Math.min(d, SPEED*dt); zs.x += dx/d*s; zs.z += dz/d*s;
-        const want = Math.atan2(dx, dz); let dr = want - ZC.g.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); ZC.g.rotation.y += dr*Math.min(1, dt*8);
-        legPose(Math.sin(t*9)*.55); ZC.body.position.y = Math.abs(Math.sin(t*9))*.04;
+        const s = Math.min(d, SPEED*dt); zs.x += dx/d*s; zs.z += dz/d*s; moved = s;
+        turnZ(Math.atan2(dx, dz), dt);
       }
-      ZC.g.position.set(zs.x, floorY(zs.x, zs.z), zs.z);
-      if(zs.mode !== 'sit' && !(zs.mode==='go' && !zs.path.length) && NAV.inside(zs.x, zs.z) && Math.hypot(zs.x-CHAIR.x, zs.z-CHAIR.z) > .8){ zs.bad++; }
+      if(zs.mode !== 'sitdown' && zs.mode !== 'sit' && !(zs.mode==='go' && zs.path.length <= 1) && NAV.inside(zs.x, zs.z) && Math.hypot(zs.x-CHAIR.x, zs.z-CHAIR.z) > .8){ zs.bad++; }
     }
+    if(zs.mode !== 'sitdown' && zs.mode !== 'rise' && zs.mode !== 'sit') ZC.g.position.set(zs.x, floorY(zs.x, zs.z), zs.z);
+    /* the stride follows the ground covered (P2-5: the same steps per metre strolling or hurrying), easing in and out */
+    zs.ph += moved*Math.PI/Z_STRIDE;
+    zs.amp += ((moved > 0 ? 1 : 0) - zs.amp)*Math.min(1, dt*8);
+    if(zs.mode === 'walk' || zs.mode === 'go'){ legPose(Math.sin(zs.ph)*.55*zs.amp); ZC.body.position.y = Math.abs(Math.sin(zs.ph))*.04*zs.amp; zs.stand = 1; }
     if(zs.mode === 'putt'){
       zs.timer += dt; const k = zs.timer;
-      ZC.g.rotation.y = Math.atan2(GREEN.hx-zs.x, GREEN.hz-zs.z) - Math.PI/2;
+      if(k < .3) turnZ(Math.atan2(GREEN.hx-zs.x, GREEN.hz-zs.z) - Math.PI/2, dt);
+      else ZC.g.rotation.y = Math.atan2(GREEN.hx-zs.x, GREEN.hz-zs.z) - Math.PI/2;
       ZC.putter.visible = true; ZC.legL.rotation.x = ZC.legR.rotation.x = 0; ZC.armL.rotation.x = -.5;
       const sw = k < 1.4 ? Math.sin(k*2.2)*.5 : 0; ZC.armR.rotation.x = -.5 + sw; ZC.armR.rotation.z = .25;
       ZC.ballG.visible = true;
@@ -1923,14 +2022,27 @@ function start(){
       if(k > 3.4 && k < 4.6){ ZC.armL.rotation.x = ZC.armR.rotation.x = -2.6; ZC.body.position.y = Math.abs(Math.sin(k*10))*.12; }   // celebrate
       if(k > 4.8){ ZC.armR.rotation.z = 0; ZC.putter.visible = false; ZC.ballG.visible = false; zs.mode = 'walk'; }
     }
-    if(zs.mode === 'coffee'){ if(zs.timer === 0){ say('zeno', 'Coffee, Miko? ☕', 2.4); setTimeout(() => say('miko', 'Coming, love ☕', 2.4), 1300); } zs.timer += dt; legPose(0); ZC.body.position.y = 0; if(zs.timer > 3.6) zs.mode = 'walk'; }
+    if(zs.mode === 'coffee'){   // turns to Miko at her desk to ask
+      if(zs.timer === 0){ say('zeno', 'Coffee, Miko? ☕', 2.4); setTimeout(() => say('miko', 'Coming, love ☕', 2.4), 1300); }
+      zs.timer += dt; legPose(0); ZC.body.position.y = 0; turnZ(Math.atan2(POS.miko.x-zs.x, POS.miko.z-.9-zs.z), dt); if(zs.timer > 3.6) zs.mode = 'walk'; }
     if(zs.mode === 'look'){ zs.timer += dt; legPose(0); ZC.body.position.y = 0; ZC.g.rotation.y += Math.sin(t*1.3)*dt*.8; ZC.armR.rotation.x = -1.2 + Math.sin(t*4)*.2; if(zs.timer > 3) zs.mode = 'walk'; }
-    if(zs.mode === 'sit'){
+    /* sitting down and standing up take SIT_SECS: down into the chair, legs forward, arms to the desk; and back */
+    if(zs.mode === 'sitdown' || zs.mode === 'rise' || zs.mode === 'sit'){
       Z.chair.getWorldPosition(CHAIR);
-      ZC.g.position.set(CHAIR.x, CHAIR.y - .25, CHAIR.z + .05); ZC.g.rotation.y = Z.chair.rotation.y;
-      ZC.legL.rotation.x = ZC.legR.rotation.x = -Math.PI/2 + .1; ZC.armL.rotation.x = ZC.armR.rotation.x = -1.1; ZC.armR.rotation.z = 0;
-      ZC.body.position.y = Math.sin(t*1.6)*.01;
-    }
+      if(zs.mode === 'sitdown') zs.k = Math.min(1, zs.k + dt/SIT_SECS);
+      if(zs.mode === 'rise') zs.k = Math.max(0, zs.k - dt/SIT_SECS);
+      if(zs.mode === 'sit') zs.k = 1;
+      const e = ease(zs.k);
+      if(zs.mode !== 'rise') turnZ(Z.chair.rotation.y, dt);
+      ZC.g.position.set(CHAIR.x, lerp(CHAIR.y, CHAIR.y - .25, e), CHAIR.z + .05*e);
+      ZC.legL.rotation.x = ZC.legR.rotation.x = lerp(0, -Math.PI/2 + .1, e);
+      ZC.armL.rotation.x = ZC.armR.rotation.x = lerp(0, -1.1, e); ZC.armR.rotation.z = 0;
+      ZC.body.position.y = zs.mode === 'sit' ? Math.sin(t*1.6)*.01 : 0;
+      zs.stand = 1 - e; zs.x = CHAIR.x; zs.z = CHAIR.z;
+      if(zs.mode === 'sitdown' && zs.k >= 1){ zs.mode = 'sit'; const f = zs.onArrive; zs.onArrive = null; f && f(); }
+      if(zs.mode === 'rise' && zs.k <= 0){   // up again: step out beside the desk, then on round the office
+        zs.mode = 'walk'; zs.i = 0; zs.leg = [[sideX(), CHAIR.z]]; zs.stand = 1; }
+    } else if(zs.mode !== 'walk' && zs.mode !== 'go') zs.stand = 1;
   }
   window.__zenoTick = zenoTick;
 
@@ -2230,11 +2342,11 @@ function start(){
     const items = [], bodies = [], away = new Set(walkers.map(w => w.dk.b.id));
     for(const B of HB){
       const w = where(B.id); if(!w || !B.data){ hideB(B); continue; }
-      pv.set(w.x, w.y + BUB_Y(B.id), w.z).project(camera);
+      pv.set(w.x, w.y + BUB_Y(B.id) + w.rise, w.z).project(camera);
       if(pv.z > 1 || pv.z < -1){ hideB(B); continue; }   // behind the camera
       B.ax = (pv.x + 1)/2*W; B.ay = (1 - pv.y)/2*H;
       pv.set(w.x, w.y, w.z).project(camera); const fx = (pv.x + 1)/2*W, fy = (1 - pv.y)/2*H;
-      pv.set(w.x, w.y + HEAD_TOP(B.id), w.z).project(camera); const tall = fy - (1 - pv.y)/2*H;
+      pv.set(w.x, w.y + HEAD_TOP(B.id) + w.rise, w.z).project(camera); const tall = fy - (1 - pv.y)/2*H;
       B.big = B.big ? tall >= NAME_OFF : tall >= NAME_ON;
       B.body = {x:fx - tall*.28, y:fy - tall, w:tall*.56, h:Math.max(2, tall)};
       if(B.id !== 'zeno' && !away.has(B.id)) bodies.push(B);   // someone walking past doesn't push bubbles about
@@ -2279,14 +2391,16 @@ function start(){
   function addCapsule(parent, id, top){
     const m = new THREE.Mesh(new THREE.CapsuleGeometry(.4, top - .8, 4, 8), new THREE.MeshBasicMaterial());
     m.visible = false; m.position.set(0, top/2, 0); m.userData.pick = id === 'zeno' ? {person:'zeno'} : {bot:id}; m.userData.top = top;
-    parent.add(m); CAPS.push(m);
+    parent.add(m); CAPS.push(m); return m;
   }
-  DESKS.forEach(dk => addCapsule(dk.c.root, dk.b.id, BUB_Y(dk.b.id)));
+  /* a standing bot's capsule stretches up to its raised bubble */
+  function capTo(m, rise){ const h = m.userData.top + rise; m.scale.y = h/m.userData.top; m.position.y = h/2; }
+  DESKS.forEach(dk => { dk.cap = addCapsule(dk.c.root, dk.b.id, BUB_Y(dk.b.id)); });
   addCapsule(ZC.g, 'zeno', BUB_Y('zeno'));
   const _cw = new THREE.Vector3();
   function capsules(){
     return CAPS.map(m => { m.getWorldPosition(_cw); const p = m.userData.pick;
-      return {id:p.person || p.bot, x:_cw.x, y:_cw.y, z:_cw.z, r:.4, top:_cw.y + m.userData.top/2}; });
+      return {id:p.person || p.bot, x:_cw.x, y:_cw.y, z:_cw.z, r:.4, top:_cw.y + m.userData.top*m.scale.y/2}; });
   }
   function bubbleAt(x, y){
     let best = null, bz = -1;
@@ -2343,28 +2457,119 @@ function start(){
   function bubPos(b){
     const B = HBY[b.who]; if(B && B.shown && B.box) return [B.box.x + B.box.w/2, B.box.y - 3];
     if(b.who === 'zeno') _v.set(ZC.g.position.x, ZC.g.position.y + 2.5, ZC.g.position.z);
-    else { const dk = DESKS.find(d => d.b.id === b.who); if(!dk) return null; dk.c.root.getWorldPosition(_v); _v.y += 2.0; }
+    else { const dk = DESKS.find(d => d.b.id === b.who); if(!dk) return null; dk.c.root.getWorldPosition(_v); _v.y += 2.0 + RISE*dk.c.stand; }
     _v.project(camera); if(_v.z > 1) return null;
     const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
     return [(_v.x*.5+.5)*w, (-_v.y*.5+.5)*h];
   }
   const kick = ball(.1, '#ffffff', 0, 0, 0, scene, true, 1); kick.visible = false;
   const paper = box(.55, .36, .02, '#efe9dc', 0, 0, 0, scene, false); paper.visible = false;
+  /* errands: where a bot goes and what it does there. face: the way to look while there. seat: somewhere to sit down
+     (Hermes: from the sofa's end he steps up to it, turns his back to it and sits; getting up is the same, backwards) */
   const IDLES = {
     coach: {to: dk => [[dk.d.g.position.x + 1.75, dk.d.g.position.z - .3]], stay: 7, act: 'keepy', line: 'Keepy-ups! ⚽'},
-    hermes: {to: () => [[8.4, 9.0]], stay: 9, act: 'sofa', line: 'Today\u2019s paper 📰'},
+    hermes: {to: () => [[9.3, 8.85]], seat: {via: [9.75, 9.3], at: [9.75, 9.65], rot: Math.PI, y: .04}, stay: 9, act: 'sofa', line: 'Today\u2019s paper 📰'},
     steve: {to: () => [[-8.2, -5.0], [-8.2, -9.4], [-12.8, -9.4], [-12.8, -5.0]], stay: 1, act: 'laps', line: 'Walking lap 🚶'},
-    miko: {to: () => [[13.7, -4.6]], stay: 4, act: 'coffee', line: 'Coffee for Zeno ☕'},
-    _: {to: () => [[13.3, 3.5]], stay: 4, act: 'cooler', line: 'Water break 💧'}
+    miko: {to: () => [[13.2, -4.5]], face: Math.PI/2, stay: 4, act: 'coffee', line: 'Coffee for Zeno ☕'},   // at the machine, clear of it (S-7)
+    _: {to: () => [[13.3, 3.5]], face: Math.PI/2, stay: 4, act: 'cooler', line: 'Water break 💧'}
   };
   const MEET = ['Morning! 👋', 'Nice work today', 'Lunch later?', 'Busy day 😅'];
   const walkers = []; let nextIdle = 6;
+  const WALK = 1.2, TURN = 7, STRIDE = .55;   // m/s; rad/s at most; a step
   const seatOf = dk => [dk.d.g.position.x, dk.d.g.position.z - .9];
+  /* out of the chair and back into it: a step aside past the chair (side -1 or 1), then back out behind the desk to
+     open floor. Every seat sits inside its desk's block, so the path finder never plans this part */
+  function seatWay(dk, side){ const [sx, sz] = seatOf(dk), x = sx + side*.72; return [[x, sz], [x, sz - .85]]; }
+  function routeOut(dk, stops){
+    const way = seatWay(dk, stops[0][0] >= dk.d.g.position.x ? 1 : -1);
+    let pts = way.slice(), [fx, fz] = way[1];
+    for(const [x, z] of stops){ const p = NAV.find(fx, fz, x, z); if(!p) return null; pts = pts.concat(p); fx = x; fz = z; }
+    return pts;
+  }
+  function routeBack(w){
+    const dk = w.dk, way = seatWay(dk, w.x >= dk.d.g.position.x ? 1 : -1), p = NAV.find(w.x, w.z, way[1][0], way[1][1]);
+    return (p ? p.concat([way[0]]) : w.out.slice().reverse()).concat([seatOf(dk)]);   // no other way: back the way it came
+  }
+  /* an errand is a list of moves: stand up, walk out round the furniture, (sit down there,) stay, (get up,) walk back,
+     turn to the desk, sit down. label says which way the bot is headed, for its activity line */
   function startIdle(dk, plan, meetWith){
-    const [sx, sz] = seatOf(dk), stops = plan.to(dk);
-    let pts = [], fx = sx, fz = sz;
-    stops.forEach(([x, z]) => { pts = pts.concat(NAV.find(fx, fz, x, z)); fx = x; fz = z; });
-    walkers.push({dk, plan, pts, x: sx, z: sz, phase: 'out', timer: 0, meetWith});
+    if(walkers.some(w => w.dk === dk)) return false;
+    const stops = plan.to(dk), out = routeOut(dk, stops);
+    if(!out) return false;   // no way there round the furniture: no errand (never a straight walk through it)
+    const S = plan.seat, mv = [{m:'rise', label:'out'}, {m:'walk', pts:out, label:'out'}];
+    if(S) mv.push({m:'walk', pts:[S.via], slow:true, label:'there'}, {m:'turn', head:S.rot, label:'there'}, {m:'sit', to:S.at, y:S.y, label:'there'});
+    mv.push({m:'stay', label:'there'});
+    if(S) mv.push({m:'rise', to:S.via, label:'there'}, {m:'walk', pts:[stops[stops.length-1]], slow:true, label:'there'});
+    mv.push({m:'walk', back:true, label:'back'}, {m:'turn', head:0, label:'back'}, {m:'sit', label:'back'}, {m:'done'});
+    const [sx, sz] = seatOf(dk);
+    walkers.push({dk, plan, meetWith, mv, label:'out', out, x:sx, z:sz, yo:0, head:0, timer:0});
+    return true;
+  }
+  /* turn towards a heading at up to TURN rad/s; returns what is left to turn */
+  function turnTo(w, want, dt){
+    let dr = want - w.head; dr = Math.atan2(Math.sin(dr), Math.cos(dr));
+    const st = Math.sign(dr)*Math.min(Math.abs(dr), Math.abs(dr)*Math.min(1, dt*10), TURN*dt);
+    w.head += st; w.turned += Math.abs(st);
+    return dr - st;
+  }
+  function walkerTick(w, t, dt){
+    const c = w.dk.c, g = w.dk.d.g.position, m = w.mv[0];
+    let moved = 0; w.turned = 0; w.label = m.label || w.label;
+    if(m.m === 'rise' || m.m === 'sit'){
+      if(!m.from) m.from = [w.x, w.z, w.yo];
+      c.stand = m.m === 'rise' ? Math.min(1, c.stand + dt/SIT_SECS) : Math.max(0, c.stand - dt/SIT_SECS);
+      const k = ease(m.m === 'rise' ? c.stand : 1 - c.stand), to = m.to || m.from;   // how far through
+      w.x = lerp(m.from[0], to[0], k); w.z = lerp(m.from[1], to[1], k); w.yo = lerp(m.from[2], m.m === 'sit' ? (m.y || 0) : 0, k);
+      if(c.stand === (m.m === 'rise' ? 1 : 0)) w.mv.shift();
+    } else if(m.m === 'walk'){
+      if(m.back && !m.pts) m.pts = routeBack(w);
+      const tg = m.pts[0];
+      if(!tg) w.mv.shift();
+      else {
+        const dx = tg[0]-w.x, dz = tg[1]-w.z, d = Math.hypot(dx, dz);
+        if(d < .02){ w.x = tg[0]; w.z = tg[1]; m.pts.shift(); }
+        else {
+          const left = turnTo(w, Math.atan2(dx, dz), dt);   // a sharp turn is made on the spot, then the walk goes on
+          const st = (m.slow ? .6 : WALK)*Math.max(0, Math.min(1, (Math.cos(left) - .2)/.8))*dt;
+          if(d <= st){ moved = d; w.x = tg[0]; w.z = tg[1]; m.pts.shift(); }
+          else { moved = st; w.x += dx/d*st; w.z += dz/d*st; }
+        }
+      }
+    } else if(m.m === 'turn'){
+      if(Math.abs(turnTo(w, m.head, dt)) < .002){ w.head = m.head; w.mv.shift(); }
+    } else if(m.m === 'stay'){
+      if(!m.said){ m.said = true;
+        if(w.plan.line && !w.meetWith) say(w.dk.b.id, w.plan.line, 2.4);
+        if(w.meetWith) say(w.dk.b.id, MEET[Math.floor(Math.random()*MEET.length)], 2.4);
+      }
+      w.timer += dt;
+      const mate = w.meetWith && walkers.find(x => x.dk === w.meetWith);
+      if(mate) turnTo(w, Math.atan2(mate.x - w.x, mate.z - w.z), dt);
+      else if(w.plan.face != null) turnTo(w, w.plan.face, dt);
+      if(w.timer > w.plan.stay){ kick.visible = false; paper.visible = false; w.mv.shift(); }
+    } else if(m.m === 'done'){
+      c.root.position.set(0, 0, -.9); c.root.rotation.y = 0; c.stand = 0; c.amp = 0; c.ph = 0; capTo(w.dk.cap, 0);
+      return false;
+    }
+    /* the stride follows the ground covered (a sharp turn on the spot takes small steps too) */
+    c.ph += (moved + w.turned*.25)*Math.PI/STRIDE;
+    c.amp += ((moved > 0 || w.turned > 1e-3 ? 1 : 0) - c.amp)*Math.min(1, dt*8);
+    c.root.position.set(w.x - g.x, floorY(w.x, w.z) + w.yo, w.z - g.z); c.root.rotation.y = w.head;
+    const o = {t};
+    if(m.m === 'stay' && w.plan.act === 'keepy'){
+      const ws = c.root.getWorldPosition(_v), b = Math.abs(Math.sin(t*5));
+      kick.visible = true; kick.position.set(ws.x + Math.sin(w.head)*.45, .25 + b*.9, ws.z + Math.cos(w.head)*.45);
+      o.kick = .9*Math.pow(1 - b, 4);   // the right foot meets the ball each time it drops
+    }
+    if(m.m === 'stay' && w.plan.act === 'sofa'){
+      o.read = .6; paper.visible = true;
+      paper.position.set(0, 1.36 + c.body.position.y, .5); c.root.localToWorld(paper.position); paper.rotation.y = w.head;
+    }
+    poseBot(c, o); capTo(w.dk.cap, RISE*c.stand);
+    /* away from the desk the head looks where it goes (down at the ball, at the paper), not still at the screen */
+    const hx = m.m === 'stay' && w.plan.act === 'keepy' ? .35 : m.m === 'stay' && w.plan.act === 'sofa' ? .1 : .02, kk = Math.min(1, dt*6);
+    c.head.rotation.x += (hx - c.head.rotation.x)*kk; c.head.rotation.y += (0 - c.head.rotation.y)*kk;
+    return true;
   }
   function idleTick(t, dt){
     const busy = document.querySelector('.modal.on, .pc, .pie');
@@ -2372,34 +2577,12 @@ function start(){
       nextIdle = t + 14 + Math.random()*10;
       const pool = DESKS.filter(d => !d.working || IDLES[d.b.id]);
       const dk = pool[Math.floor(Math.random()*pool.length)];
-      if(dk){ startIdle(dk, IDLES[dk.b.id] || IDLES._);
-        if(!IDLES[dk.b.id] && Math.random() < .5){ const mate = DESKS.find(d => d !== dk && !IDLES[d.b.id] && !d.working);
-          if(mate) startIdle(mate, {to: () => [[12.6, 3.5]], stay: 4, act: 'cooler'}, dk); } }
-    }
-    for(let k = walkers.length-1; k >= 0; k--){
-      const w = walkers[k], c = w.dk.c, g = w.dk.d.g.position;
-      if(w.phase === 'out' || w.phase === 'back'){
-        const tg = w.pts[0];
-        if(!tg){
-          if(w.phase === 'out'){ w.phase = 'stay'; w.timer = 0;
-            if(w.plan.line && !w.meetWith) say(w.dk.b.id, w.plan.line, 2.4);
-            if(w.meetWith) say(w.dk.b.id, MEET[Math.floor(Math.random()*MEET.length)], 2.4); }
-          else { c.root.position.set(0, 0, -.9); c.root.rotation.y = 0; c.body.position.y = 0; walkers.splice(k, 1); }
-          continue;
-        }
-        const dx = tg[0]-w.x, dz = tg[1]-w.z, d = Math.hypot(dx, dz), st = 1.2*dt;
-        if(d <= st){ w.x = tg[0]; w.z = tg[1]; w.pts.shift(); } else { w.x += dx/d*st; w.z += dz/d*st; c.root.rotation.y = Math.atan2(dx, dz); }
-        c.root.position.set(w.x - g.x, Math.abs(Math.sin(t*8))*.05 + .05, w.z - g.z); c.body.position.y = 0;
-      } else {
-        w.timer += dt; const ws = c.root.getWorldPosition(_v);
-        if(w.plan.act === 'keepy'){ kick.visible = true; kick.position.set(ws.x + Math.sin(c.root.rotation.y)*.45, .25 + Math.abs(Math.sin(t*5))*.9, ws.z + Math.cos(c.root.rotation.y)*.45); }
-        if(w.plan.act === 'sofa'){ c.root.position.set(10.1 - g.x, .2, 9.75 - g.z); c.root.rotation.y = Math.PI; paper.visible = true; paper.position.set(10.1, 1.5, 9.25); paper.rotation.y = Math.PI; }
-        if(w.plan.act === 'cooler' || w.plan.act === 'coffee') c.root.rotation.y = w.plan.act === 'coffee' ? Math.PI/2 : Math.PI/2;
-        if(w.timer > w.plan.stay){ kick.visible = false; paper.visible = false;
-          const [sx, sz] = seatOf(w.dk); if(w.plan.act === 'sofa'){ w.x = 8.4; w.z = 9.0; }
-          w.pts = NAV.find(w.x, w.z, sx, sz).concat([[sx, sz]]); w.phase = 'back'; }
+      if(dk && startIdle(dk, IDLES[dk.b.id] || IDLES._) && !IDLES[dk.b.id] && Math.random() < .5){
+        const mate = DESKS.find(d => d !== dk && !IDLES[d.b.id] && !d.working);
+        if(mate) startIdle(mate, {to: () => [[12.6, 3.5]], face: Math.PI/2, stay: 4, act: 'cooler'}, dk);
       }
     }
+    for(let k = walkers.length-1; k >= 0; k--) if(!walkerTick(walkers[k], t, dt)) walkers.splice(k, 1);
     const now = t;
     for(let k = BUBS.length-1; k >= 0; k--){ const b = BUBS[k];
       if(now > b.until){ b.el.remove(); BUBS.splice(k, 1); continue; }
@@ -2420,15 +2603,25 @@ function start(){
   let marked = null;
   const _p = new THREE.Vector3();
   function deskOf(id){ return DESKS.find(d => d.b.id === id); }
+  /* where they stand: the feet (x, y, z) and rise, how far a standing bot's head is above where it is seated */
   function where(id){
-    if(id === 'zeno') return {x:ZC.g.position.x, y:ZC.g.position.y, z:ZC.g.position.z};
+    if(id === 'zeno') return {x:ZC.g.position.x, y:ZC.g.position.y, z:ZC.g.position.z, rise:0};
     const dk = deskOf(id); if(!dk) return null;
-    dk.c.root.getWorldPosition(_p); return {x:_p.x, y:_p.y, z:_p.z};
+    dk.c.root.getWorldPosition(_p); return {x:_p.x, y:_p.y, z:_p.z, rise:RISE*dk.c.stand};
   }
+  const riseOf = id => { const dk = id !== 'zeno' && deskOf(id); return dk ? RISE*dk.c.stand : 0; };
+  /* how they stand: stand 0 seated .. 1 standing, step the stride's phase (it grows with the ground covered), heading */
+  function pose(id){
+    if(id === 'zeno') return {stand:zs.stand, step:zs.ph, heading:ZC.g.rotation.y};
+    const dk = deskOf(id); if(!dk) return null;
+    return {stand:dk.c.stand, step:dk.c.ph, heading:dk.c.root.rotation.y};
+  }
+  /* send a bot on its errand now: false if it is already away, or there is no way there round the furniture */
+  function errand(id){ const dk = deskOf(id); return !!dk && startIdle(dk, IDLES[id] || IDLES._); }
   /* what a close-up must fit: from the top of the head bubble, whose tail points at a spot over the head and which is
      CHIP_H pixels tall at any zoom (with the gold rim), down to the front of the gold ring on the floor */
   const CHIP_H = 29;
-  const figure = id => ({fig:BUB_Y(id), pad:CHIP_H, ring:RING_R});
+  const figure = id => ({get fig(){ return BUB_Y(id) + riseOf(id); }, pad:CHIP_H, ring:RING_R});   // read each frame: a walker stands taller
   /* what the person is doing, read from the scene and the task data only: no invented moods */
   const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
   const ZENO_DOING = {sit:['🪑', 'At the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
@@ -2439,8 +2632,8 @@ function start(){
     } else {
       const dk = deskOf(id); if(!dk) return null;
       const w = walkers.find(x => x.dk === dk), c = A.counts(id);
-      if(w && w.phase === 'back') a = ['🚶', 'Heading back to the desk'];
-      else if(w && w.phase === 'out' && w.plan.act === 'sofa') a = ['🚶', 'Off to the sofa'];
+      if(w && w.label === 'back') a = ['🚶', 'Heading back to the desk'];
+      else if(w && w.label === 'out' && w.plan.act === 'sofa') a = ['🚶', 'Off to the sofa'];
       else if(w) a = ERRANDS[w.plan.act] || ['🚶', 'Away from the desk'];
       else if(!c.open) a = ['💤', 'At desk · no open tasks'];
       else if(dk.working) a = ['⌨️', 'At desk · typing'];
@@ -2494,7 +2687,7 @@ function start(){
     return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
       w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom};
+  A.scene = {where, pose, errand, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom};
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
@@ -2512,15 +2705,12 @@ function start(){
       DESKS.forEach(dk => {
         const ph = dk.phase, c = dk.c;
         if(walkers.some(w => w.dk === dk)) return;
-        if(dk.working){
-          c.body.position.y = Math.sin(t*4+ph)*.012;
-          c.handL.position.y = .83 + Math.max(0, Math.sin(t*16+ph))*.035;
-          c.handR.position.y = .83 + Math.max(0, Math.sin(t*16+ph+Math.PI))*.035;
+        if(dk.working){   // typing: hands bob on the keys, a nod at the screen
+          poseBot(c, {t, ph, typing:true, bob:Math.sin(t*4+ph)*.012});
           c.head.rotation.x = .12 + Math.sin(t*1.3+ph)*.03; c.head.rotation.y = Math.sin(t*.7+ph)*.08;
           dk.d.screenM.emissiveIntensity = .55 + Math.sin(t*3+ph)*.12;
         } else {
-          c.body.position.y = Math.sin(t*1.5+ph)*.02;
-          c.handL.position.y = c.handR.position.y = .83;
+          poseBot(c, {t, ph, bob:Math.sin(t*1.5+ph)*.02});
           c.head.rotation.y = Math.sin(t*.45+ph)*.35; c.head.rotation.x = dk.idle ? .18 + Math.sin(t*.8+ph)*.05 : -.05;
         }
         c.eyes.scale.y = ((t+ph) % 4.3) < .12 ? .1 : 1;
