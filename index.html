@@ -91,9 +91,20 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 .legend b{font-weight:700;color:var(--ink);margin-right:2px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend i{width:11px;height:11px;border-radius:2px;display:inline-block;box-shadow:0 1px 0 rgba(0,0,0,.2)}
-.hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;width:max-content;max-width:calc(100% - 24px);text-align:center;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.35;color:var(--ink2);background:rgba(255,250,244,.94);border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;transition:opacity .5s}
+/* the first-visit gesture hint sits just above the camera buttons (the room chips own the top strip) */
+.hint{position:absolute;bottom:66px;left:50%;transform:translate(-50%,calc(var(--sheet-vis) * -1));z-index:6;width:max-content;max-width:calc(100% - 24px);text-align:center;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.35;color:var(--ink2);background:rgba(255,250,244,.94);border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;transition:opacity .5s,transform .32s cubic-bezier(.2,.8,.2,1)}
 .hint:empty{display:none}
 .hint.gone{opacity:0}
+#app.dragging .hint{transition:opacity .5s}
+/* room chips: camera presets in the office's top strip; the follow pill takes that strip while following */
+.rooms{position:absolute;top:8px;left:10px;right:10px;z-index:7;display:flex;gap:5px;pointer-events:none}
+.rooms[hidden],.stage.following .rooms,.stage.nogl .rooms{display:none}
+.rchip{pointer-events:auto;flex:none;min-height:40px;padding:0 9px;border:2px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);font:700 13px/1 var(--font);white-space:nowrap;cursor:pointer;box-shadow:2px 2px 0 rgba(26,22,18,.15)}
+.rchip:hover{background:var(--paper)}
+.rchip[aria-pressed="true"]{background:var(--ink);color:#fff}
+.rchip .rl,.rooms.wide .rchip .rs{display:none}
+.rooms.wide .rchip .rl{display:inline}
+#app.sheet-full .rooms{visibility:hidden}
 /* camera buttons: one row, bottom right under the thumb, riding just above the sheet (zoom nearest the thumb) */
 .camctl{position:absolute;right:10px;bottom:10px;z-index:7;display:flex;gap:6px;transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}
 .camctl[hidden]{display:none}
@@ -403,6 +414,13 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
     <div class="loading" id="loading"><span>Setting up the office…</span></div>
     <div class="fallback" id="fallback" hidden></div>
     <div class="hint" id="hint" aria-hidden="true"></div>
+    <div class="rooms" id="rooms" role="group" aria-label="Rooms" hidden>
+      <button type="button" class="rchip" data-room="founder" aria-pressed="false" aria-label="Founder office"><span class="rl">Founder office</span><span class="rs">Founder</span></button>
+      <button type="button" class="rchip" data-room="ceo" aria-pressed="false" aria-label="CEO corner"><span class="rl">CEO corner</span><span class="rs">CEO</span></button>
+      <button type="button" class="rchip" data-room="floor" aria-pressed="false" aria-label="Open floor"><span class="rl">Open floor</span><span class="rs">Floor</span></button>
+      <button type="button" class="rchip" data-room="lounge" aria-pressed="false" aria-label="Lounge"><span class="rl">Lounge</span><span class="rs">Lounge</span></button>
+      <button type="button" class="rchip" data-room="green" aria-pressed="false" aria-label="Putting green"><span class="rl">Putting green</span><span class="rs">Green</span></button>
+    </div>
     <div class="camctl" id="camctl" role="group" aria-label="Camera" hidden>
       <div class="camgrp"><button type="button" data-cam="home" aria-label="Show the whole office" title="Whole office"><svg viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5.5h4V20"/></svg></button></div>
       <div class="camgrp"><button type="button" data-cam="left" aria-label="Rotate anticlockwise" title="Rotate anticlockwise"><svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5"/><path d="M3.5 3.5v5h5"/></svg></button><button type="button" data-cam="right" aria-label="Rotate clockwise" title="Rotate clockwise"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6l2.5 2.5"/><path d="M20.5 3.5v5h-5"/></svg></button></div>
@@ -1063,6 +1081,7 @@ function setFollow(on){
 function followEnded(){ if(following){ following = false; syncFollow(); } }
 function syncFollow(){
   followPill.hidden = !following;
+  document.getElementById("stage").classList.toggle("following", following);   /* the pill takes the room chips' strip */
   if(following){ var n = who(sel).name; document.getElementById("followTxt").textContent = "Following "+n; followPill.setAttribute("aria-label", "Stop following "+n); }
   cardFollow.setAttribute("aria-pressed", String(following)); cardFollow.textContent = following ? "Following" : "Follow";
   listeners.forEach(function(fn){fn("follow");});
@@ -1910,6 +1929,8 @@ function start(){
     return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible()), below:strip},
                     free: {x:r.left + 8, y:r.top + 8, w:r.width - 16, h:Math.max(60, r.height - below - 8)}};
   }
+  const roomsEl = document.getElementById('rooms');
+  let activeRoom = null, roomGoing = false;   // the room chip pressed now; true while a chip itself moves the camera
   const cam = createMapCam({
     camera, el: stage, canvas: renderer.domElement, buttons: camctl, reduce,
     room: {x0: -RX + 1.5, x1: RX - 1.5, z0: -RZ + 1.5, z1: RZ - 1.5},   // where the middle of the view may go
@@ -1919,10 +1940,44 @@ function start(){
     viewRect: () => stageRects().view, freeRect: () => stageRects().free, topInset: 56,
     pick: (x, y) => pickAt(x, y),
     onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.select(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
-    onUser: hideHint, onUnfollow: () => A.followEnded()
+    onUser: () => { hideHint(); if(!roomGoing) setRoom(null); }, onUnfollow: () => A.followEnded()
   });
   window.officeCam = cam;
   camctl.hidden = false;
+
+  /* ---------- rooms: each chip is a camera preset ----------
+     It frames that part of the office in the part you can see (above the sheet, under the chips, clear of the camera
+     buttons) from an angle that suits it. The chip stays pressed until the camera moves some other way. */
+  const ROOMS = {
+    founder:{box:[FO.x0, FO.z0, FO.x1, -.6], azs:[.35]},        // Zeno's office, with Miko's desk by its glass
+    ceo:{box:[SO.x0, SO.z0, SO.x1, SO.z1], azs:[.35]},
+    floor:{box:[-12.5, -2.9, 12.5, 5.9], azs:[.3, Math.PI/2]},   // the desk rows, front-on or side-on, whichever shows them bigger
+    lounge:{box:[7.6, 6.9, RX, RZ], azs:[2.8]},                  // from the desks' side: the sofa faces you
+    green:{box:[2, -8.1, 6, -4.3], azs:[.35]}
+  };
+  function setRoom(id){
+    if(id === activeRoom) return;
+    activeRoom = id;
+    roomsEl.querySelectorAll('.rchip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.room === id)));
+    if(A.roomChanged) A.roomChanged(id);
+  }
+  /* the part of the office a room is framed in: what you can see now, under the chips' strip, above the camera buttons */
+  function roomRect(){
+    const v = stageRects().view, top = 60, bot = Math.max(v.below || 0, camctl.offsetHeight + 18);
+    return {x:v.x + 8, y:v.y + top, w:v.w - 16, h:Math.max(40, v.h - top - bot)};
+  }
+  function goRoom(id, ms){
+    const R = ROOMS[id]; if(!R) return false;
+    const [x0, z0, x1, z1] = R.box, pts = [];
+    [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].forEach(([x, z]) => pts.push([x, 0, z], [x, 1.7, z]));
+    roomGoing = true;
+    const ok = cam.fitTo(pts, R.azs, roomRect(), ms);
+    roomGoing = false;
+    if(ok) setRoom(id);
+    return ok;
+  }
+  roomsEl.addEventListener('click', e => { const b = e.target.closest('.rchip'); if(b) goRoom(b.dataset.room); });
+  roomsEl.hidden = false;
   /* the gesture hint and the stage label match the device: fingers on touch screens, mouse and keys elsewhere */
   const coarse = matchMedia('(pointer: coarse)');
   function describe(){
@@ -1946,6 +2001,7 @@ function start(){
     renderer.setSize(w, h, false);
     camera.aspect = w/h; camera.updateProjectionMatrix();
     rects = null; lastPeek = A.sheet.peek(); cam.resized();
+    roomsEl.classList.toggle('wide', w >= 560);   // full room names where they fit on one row
     HB.forEach(B => { B.key = ''; });   // re-measure the bubbles lazily
     measureObstacles();
   }
@@ -1953,7 +2009,7 @@ function start(){
   let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
-    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill].filter(Boolean).map(el => {
+    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill, ...roomsEl.querySelectorAll('.rchip')].filter(Boolean).map(el => {
       const r = el.getBoundingClientRect();
       return {x:r.left-ox, y:r.top-oy, w:r.width, h:r.height};
     }).filter(r => r.w && r.h);
@@ -2271,7 +2327,7 @@ function start(){
     return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
       w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, activity, focus, follow, mark, bubbles, capsules, walls};
+  A.scene = {where, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom};
 
   /* ---------- loop ---------- */
   const clock = new THREE.Clock();
@@ -2638,19 +2694,22 @@ function createMapCam(o){
   }, {passive:false});
   el.addEventListener('contextmenu', e => { if(!skip(e.target)) e.preventDefault(); });
 
-  /* home: the whole room fitted into the part of the office the sheet leaves free at its smallest; of the angles in
-     o.homeAzs (front-on, side-on) the one that shows the office biggest wins: side-on on a portrait phone */
-  function fit(){
-    const r = o.freeRect(); if(!(r.w > 20 && r.h > 20)) return null;
+  /* the view that shows points ([x, y, z]) as big as possible inside screen rect r; of the angles in azs, the one that
+     shows them biggest wins. Home: the whole room in the part of the office the sheet leaves free at its smallest, from
+     o.homeAzs (front-on, side-on: side-on on a portrait phone). Rooms: one part of it, in the part you can see now */
+  function fitIn(points, azs, r, start){
+    if(!(r && r.w > 20 && r.h > 20)) return null;
     const keep = snap(), keepMax = lim.maxDist;
+    let cx = 0, cz = 0; points.forEach(q => { cx += q[0]/points.length; cz += q[2]/points.length; });
+    if(start){ cx = start[0]; cz = start[1]; }
     lim.maxDist = 1e4; fitting = true;
     let best = null;
-    for(const az of o.homeAzs){
-      Object.assign(s, {tx:o.homeTarget[0], tz:o.homeTarget[1], az, tilt:0, dist:40});
+    for(const az of azs){
+      Object.assign(s, {tx:cx, tz:cz, az, tilt:0, dist:40});
       for(let i = 0; i < 80; i++){
         apply();
         let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-        for(const q of o.fitPoints){ const p = project(q[0], q[1], q[2]); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+        for(const q of points){ const p = project(q[0], q[1], q[2]); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
         const P = floorAt((x0 + x1)/2, (y0 + y1)/2); if(P) pin(P, r.x + r.w/2, r.y + r.h/2);
         const k = Math.max((x1 - x0)/r.w, (y1 - y0)/r.h);
         if(Math.abs(k - 1) < 5e-4) break;
@@ -2661,6 +2720,7 @@ function createMapCam(o){
     lim.maxDist = keepMax; fitting = false; Object.assign(s, keep); apply();
     return best;
   }
+  function fit(){ return fitIn(o.fitPoints, o.homeAzs, o.freeRect(), o.homeTarget); }
   function resized(){
     cr = null;
     const h = fit(); if(!h) return;
@@ -2681,6 +2741,13 @@ function createMapCam(o){
       if(to.x != null) end.tx = to.x; if(to.z != null) end.tz = to.z;
       ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; });
       unfollow(); limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
+    },
+    /* a preset view: points as big as possible in screen rect r, from the best of azs; it is the user's choice, so
+       it ends follow like a pan */
+    fitTo(points, azs, r, ms){
+      const b = fitIn(points, azs, r); if(!b) return false;
+      unfollow(); moved(); glide(b, ms == null ? 650 : ms, [b.tx, b.tz]);
+      return true;
     },
     follow(get, fig){ follow = get || null; followFig = fig || {}; },
     following(){ return !!follow; },
