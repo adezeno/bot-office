@@ -321,6 +321,8 @@ details.cdone summary{cursor:pointer;padding:6px 0;font-weight:700;color:var(--i
 .pend{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:6px;font-size:12px;color:var(--ink2);background:#fff7e0;border:1px solid #e6c069;border-radius:8px;padding:5px 8px}
 .pchip{display:inline-block;font-size:11px;font-weight:800;padding:0 7px;border-radius:999px;background:#ffe2a8;color:#7a4b00;border:1px solid #e0a63a;white-space:nowrap}
 .pend a,.linkbtn{color:var(--steel);font-weight:700;font-size:12px}
+.pacts{display:flex;flex-wrap:wrap;align-items:center;gap:0 16px;width:100%}
+.pacts>a,.pacts>.linkbtn{min-height:44px;display:inline-flex;align-items:center}   /* one row of thumb-sized links */
 .linkbtn{background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
 .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .tag{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--paper3);color:var(--ink2)}
@@ -647,7 +649,7 @@ function portrait(b){
 var ZENO = {id:"zeno", name:"Zeno", role:"Founder", blurb:"Founder · Gana Teguh", color:"#1f2a44", wall:"#f6ead6", skin:"#e8b98f", hair:"#14100c", acc:"zeno"};
 
 /* ---------- state ---------- */
-var state = {filter:"all", tab:"floor", covered:false};
+var state = {filter:"all", tab:"floor", covered:false, modalOn:false, pc:false};   /* covered/modalOn/pc: something hides the office, so it isn't drawn */
 var FILTERS = [
   {id:"all", label:"All", test:function(t){return true;}},
   {id:"need", label:"Needs you", test:function(t){return !!t._why;}},
@@ -813,11 +815,15 @@ function renderOwn(){
 }
 
 /* ---------- change requests ----------
-   Nothing is saved here. An action marks the task "Pending sync" in localStorage and opens a
-   pre-filled GitHub issue; Jarvis applies it to the Tasks page and the next data.js shows it.
-   A pending mark clears itself once data.js shows the change, or once asOf moves on. */
+   Nothing is saved here. An action opens a pre-filled GitHub issue and, once that tab has opened, marks the task
+   "Pending sync" in localStorage with the time it was sent; Jarvis applies it to the Tasks page and the next data.js
+   shows it. A mark clears itself once data.js shows the change; after a day; or once a sync two hours after the
+   request finds no open GitHub request for it (it was never submitted). Withdraw clears it at once. */
 var ISSUE_URL = "https://github.com/adezeno/bot-office/issues/new";
-var PEND_KEY = "botoffice.pending.v1";
+var ISSUE_LIST = "https://github.com/adezeno/bot-office/issues?q=is%3Aissue+is%3Aopen+label%3Aoffice-change";
+var ISSUES_API = "https://api.github.com/repos/adezeno/bot-office/issues?state=open&labels=office-change&per_page=100";
+var PEND_KEY = "botoffice.pending.v1", DAY = 864e5, SYNC_GRACE = 2*36e5;
+var withdrawn = {}, unsent = {};   /* this visit only: a request just withdrawn, or one whose GitHub tab didn't open */
 var MOVE_STAGES = ["Inbox","Next","Doing","Waiting On","Needs Zeno","Done"];
 var pending = {};
 try { pending = JSON.parse(localStorage.getItem(PEND_KEY)||"{}") || {}; } catch(e){ pending = {}; }
@@ -829,16 +835,58 @@ function applied(r, t){
   if(r.action==="next") return (t.next||"").trim()===String(r.value).trim();
   return false;
 }
-(function prune(){
-  var changed=false;
-  /* a newer sync from Jarvis means every earlier request was handled: wipe all chips */
-  /* a chip clears only when data.js really shows that exact change (or the task is gone / done) */
+function sentAt(r){ return Date.parse(r && r.requestedAt || "") || 0; }
+/* does an open GitHub request carry this one? Its body holds the request as JSON */
+function carries(issue, r){
+  var m = String(issue && issue.body || "").match(/```json\s*(\{[\s\S]*?\})\s*```/), q = null;
+  try { q = m && JSON.parse(m[1]); } catch(e){}
+  if(q) return q.taskId===r.taskId && q.action===r.action && (r.action==="done" || String(q.value)===String(r.value));
+  return String(issue && issue.title || "").indexOf("["+r.taskId+"] ")===0;
+}
+/* clear the marks that are settled. open: the open GitHub requests when just read; aged: GitHub couldn't be asked, so a
+   day is enough. A mark stays while its request is open on GitHub; without one it goes once a day old, or once a sync
+   two hours after it still shows nothing */
+function prune(open, aged){
+  var changed=false, now=Date.now(), synced=Date.parse(D.syncedAt||"")||0;
   Object.keys(pending).forEach(function(id){
-    var r=pending[id], t=taskById(id);
-    if(!r || !t || applied(r,t) || (t.stage==="Done" && r.action!=="done")){ delete pending[id]; changed=true; }
+    var r=pending[id], t=taskById(id), at=sentAt(r), drop=!r || !t || applied(r,t) || (t.stage==="Done" && r.action!=="done");
+    if(!drop && open){
+      var mine=open.filter(function(i){ return carries(i, r); })[0];
+      if(mine){ if(r.issue!==mine.number){ r.issue=mine.number; changed=true; } }
+      else drop = now-at > DAY || (synced && synced-at >= SYNC_GRACE) || !!r.issue;   /* r.issue: it was open, now closed */
+    } else if(!drop && aged) drop = now-at > DAY && !r.issue;
+    if(drop){ delete pending[id]; changed=true; }
   });
   if(changed) savePending();
-})();
+  return changed;
+}
+prune();
+/* ask GitHub which requests are open only when that settles a mark (at most every 5 minutes) */
+function checkRequests(){
+  var now=Date.now(), synced=Date.parse(D.syncedAt||"")||0;
+  var ask=Object.keys(pending).some(function(id){ var r=pending[id], at=sentAt(r); return r.issue || now-at > DAY || (synced && synced-at >= SYNC_GRACE); });
+  if(!ask) return;
+  var c=null; try{ c=JSON.parse(sessionStorage.getItem("gtIssues")||"null"); }catch(e){}
+  (c && now-c.t < 3e5 ? Promise.resolve(c.list) : fetch(ISSUES_API, {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(list){
+    if(!Array.isArray(list)) throw new Error("not a list");
+    list=list.filter(function(i){ return !i.pull_request; }).map(function(i){ return {number:i.number, title:i.title, body:i.body}; });
+    try{ sessionStorage.setItem("gtIssues", JSON.stringify({t:Date.now(), list:list})); }catch(e){}
+    return list;
+  })).then(refreshPend).catch(function(){ refreshPend(null, true); });
+}
+/* how long ago: just now, 5 min ago, 3 h ago, 2 days ago */
+function ago(r){
+  var m=Math.max(0, Math.round((Date.now()-sentAt(r))/6e4));
+  return m < 1 ? "just now" : m < 60 ? m+" min ago" : m < 1440 ? Math.floor(m/60)+" h ago" : Math.floor(m/1440)+(m < 2880 ? " day ago" : " days ago");
+}
+/* the marks settle (open: GitHub's open requests, when just read); what changed is drawn again, else the ages move on */
+function refreshPend(open, aged){
+  if(prune(open, aged)){ refreshTaskViews(""); return; }
+  document.querySelectorAll("[data-sent]").forEach(function(e){ var r=pending[e.dataset.sent]; if(r){ var a=(e.dataset.long ? "sent " : "Pending sync · ")+ago(r); if(e.textContent!==a) e.textContent=a; } });
+}
+setInterval(function(){ refreshPend(); checkRequests(); }, 6e4);
+document.addEventListener("visibilitychange", function(){ if(!document.hidden){ refreshPend(); checkRequests(); } });
+checkRequests();
 /* first names only in anything that leaves the page (never [CLIENT], so Jarvis can still act on it) */
 function firstNames(s){ s = s==null ? "" : String(s); return FULL_RE ? s.replace(FULL_RE,function(m){return m.split(/\s+/)[0];}) : s; }
 /* requests are PUBLIC GitHub issues: same patterns as the sync's private filter (client name lists stay off this page) */
@@ -877,10 +925,13 @@ function requestChange(t, action, value){
   if(applied(r,t)) return;  /* already true on the board, nothing to ask for */
   /* confirm step: this becomes a PUBLIC GitHub request */
   if(!window.confirm("Send this to Jarvis as a PUBLIC GitHub request?\n\n"+reqSentence(r)+"\n\n(Numbers are masked. Use first names only.) You still press Submit on GitHub.")) return;
-  pending[t.id] = r; savePending();
-  window.open(issueURL(r), "_blank", "noopener");
+  /* pending only once GitHub has opened: a blocked pop-up gets a real link to it instead (S-5) */
+  var w=null; try { w=window.open(issueURL(r), "_blank"); } catch(e){}
+  if(w){ try { w.opener=null; } catch(e){} markSent(t.id, r); }
+  else { unsent[t.id]=r; delete withdrawn[t.id]; }
   refreshTaskViews(t.id);
 }
+function markSent(id, r){ pending[id]=r; delete unsent[id]; delete withdrawn[id]; savePending(); }
 function copyText(s, btn){
   function ok(){ if(btn){ var o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(function(){btn.textContent=o;},1600);} }
   function legacy(){
@@ -891,12 +942,22 @@ function copyText(s, btn){
   }
   if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(s).then(ok, legacy); else legacy();
 }
-function pendChip(t){ return pending[t.id] && t.src===SRC_TASKS ? '<span class="pchip" title="Sent to Jarvis, not applied yet">Pending sync</span>' : (t.pendingJarvis ? '<span class="pchip" title="Applied by the office sync; Jarvis has not confirmed on his board yet">Waiting for Jarvis to confirm</span>' : ''); }
+function pendChip(t){ var r = t.src===SRC_TASKS && pending[t.id]; return r ? '<span class="pchip" data-sent="'+esc(t.id)+'" title="Sent to Jarvis, not on the board yet">Pending sync · '+ago(r)+'</span>' : (t.pendingJarvis ? '<span class="pchip" title="Applied by the office sync; Jarvis has not confirmed on his board yet">Waiting for Jarvis to confirm</span>' : ''); }
+function asked(r){ return T(r.action==="done" ? "mark it done" : r.action==="stage" ? "move it to "+r.value : "change the next step to “"+r.value+"”"); }
 function pendHTML(t){
-  var r = t.src===SRC_TASKS && pending[t.id]; if(!r) return '';
-  return '<div class="pend" role="status"><span class="pchip">Pending sync</span><span>Asked Jarvis to '+T(r.action==="done" ? "mark it done" : r.action==="stage" ? "move it to "+r.value : "change the next step to “"+r.value+"”")+'. Not on the board yet.</span>'+
-    '<a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>'+
-    '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button></div>';
+  if(t.src!==SRC_TASKS) return '';
+  var r = pending[t.id], u = unsent[t.id], w = withdrawn[t.id];
+  if(r) return '<div class="pend" role="status"><span class="pchip">Pending sync</span><span>Asked Jarvis to '+asked(r)+', <span data-sent="'+esc(t.id)+'" data-long="1">sent '+ago(r)+'</span>. Not on the board yet.'+
+      (r.issue ? ' Request #'+esc(r.issue)+' is open on GitHub.' : '')+'</span>'+
+    '<span class="pacts"><a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>'+
+    '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button>'+
+    '<button type="button" class="linkbtn" data-withdraw="'+esc(t.id)+'">Withdraw</button></span></div>';
+  if(u) return '<div class="pend" role="status"><span>GitHub didn\u2019t open (a pop-up blocker?), so nothing was sent.</span>'+
+    '<span class="pacts"><a href="'+esc(issueURL(u))+'" target="_blank" rel="noopener" data-sendlink="'+esc(t.id)+'">Open the request on GitHub</a>'+
+    '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button></span></div>';
+  if(w) return '<div class="pend" role="status"><span>Withdrawn here. If you already pressed Submit on GitHub, close that request there too.</span>'+
+    '<span class="pacts"><a href="'+esc(w.issue ? "https://github.com/adezeno/bot-office/issues/"+w.issue : ISSUE_LIST)+'" target="_blank" rel="noopener">'+(w.issue ? 'Request #'+esc(w.issue)+' on GitHub' : 'Open requests on GitHub')+'</a></span></div>';
+  return '';
 }
 function actsHTML(t){
   if(!canChange(t)) return '';
@@ -1123,14 +1184,14 @@ function openModal(k){ openedAt=Date.now();
   html += '<div class="srcnote">Source: '+esc(t.src)+'. '+(canChange(t) ? 'Changes go to Jarvis as a request; Jarvis\'s board stays the source of truth.' : 'Read-only, nothing here changes the real list.')+'</div></div>';
   var m = document.getElementById("modal"), box = document.getElementById("mbox");
   box.innerHTML = html; m.setAttribute("aria-labelledby","mTitle");
-  m.classList.add("on"); m.setAttribute("aria-hidden","false");
+  m.classList.add("on"); m.setAttribute("aria-hidden","false"); state.modalOn = true;
   document.getElementById("scrim").classList.add("on");
   box.querySelector(".x").focus();
   writeLink();
 }
 function closeModal(){
   var m=document.getElementById("modal"); if(!m.classList.contains("on")) return;
-  m.classList.remove("on"); m.setAttribute("aria-hidden","true");
+  m.classList.remove("on"); m.setAttribute("aria-hidden","true"); state.modalOn = false;
   document.getElementById("scrim").classList.remove("on");
   if(lastFocus && lastFocus.focus) lastFocus.focus();
   writeLink();
@@ -1266,9 +1327,18 @@ function glideBar(v){
     if(Math.abs(v) > .02 && pbar.scrollLeft!==was) barAnim=requestAnimationFrame(tick);
   });
 }
+/* end a header gesture without acting on it: its lift was lost, or the layout flipped under it */
+function endHead(){
+  var d=hd; if(!d) return;
+  hd=null; disarm(d); appEl.classList.remove("dragging");
+  window.removeEventListener("pointermove", headMove, true);
+  window.removeEventListener("pointerup", headUp, true);
+  window.removeEventListener("pointercancel", headUp, true);
+  if(d.kind==="sheet"){ sheetEl.style.transform=""; camBtns.style.transform=""; mapBox.style.transform=""; sheetSet(sheetSnap); }
+}
 sheetHead.addEventListener("pointerdown", function(e){
   if(e.pointerType==="mouse" && e.button!==0) return;
-  if(hd && hd.id!==e.pointerId) return;   /* a second finger doesn't take over */
+  if(hd && hd.id!==e.pointerId){ if(!e.isPrimary) return; endHead(); }   /* a second finger doesn't take over; a new first one means the old lift was lost */
   cancelAnimationFrame(barAnim);
   var pb=e.target.closest && e.target.closest(".pb");
   hd={id:e.pointerId, x0:e.clientX, y0:e.clientY, t0:e.timeStamp, kind:null, onBar:!!(e.target.closest && e.target.closest("#pbar")),
@@ -1297,6 +1367,7 @@ sheetBody.addEventListener("pointerup", function(e){
 sheetBody.addEventListener("pointercancel", function(){ sw=null; });
 /* turning the phone moves the sheet between the bottom and the side; an open card stays open and re-frames its person */
 SIDE_MQ.addEventListener("change", function(){
+  endHead(); if(window.officeCam && window.officeCam.cancel) window.officeCam.cancel();
   sheetSet(sel ? "half" : "peek");
   if(sel && A3()) requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(sel && A3()) A3().focus(sel, 0); }); });
 });
@@ -1333,7 +1404,9 @@ document.addEventListener("click", function(e){
     if(on){ var inp=fm.querySelector("input"); inp.focus(); inp.select(); }
     return;
   }
-  if((el = e.target.closest("[data-copy]"))){ var pr=pending[el.dataset.copy]; if(pr) copyText(reqSentence(pr), el); return; }
+  if((el = e.target.closest("[data-copy]"))){ var pr=pending[el.dataset.copy] || unsent[el.dataset.copy]; if(pr) copyText(reqSentence(pr), el); return; }
+  if((el = e.target.closest("[data-withdraw]"))){ var wid=el.dataset.withdraw; if(pending[wid]){ withdrawn[wid]=pending[wid]; delete pending[wid]; savePending(); refreshTaskViews(wid); } return; }
+  if((el = e.target.closest("[data-sendlink]"))){ var sid=el.dataset.sendlink; if(unsent[sid]){ markSent(sid, unsent[sid]); setTimeout(function(){ refreshTaskViews(sid); }, 0); } return; }   /* the link opens GitHub itself */
   if((el = e.target.closest("[data-task]"))){ e.stopPropagation(); openModal(el.dataset.task); return; }
   if((el = e.target.closest("[data-gobot]"))){ closeModal(); select(el.dataset.gobot, {list:true}); return; }
   if((el = e.target.closest("[data-gotab]"))){ closeModal(); deselect(); setTab(el.dataset.gotab); return; }
@@ -1523,8 +1596,7 @@ function start(){
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
   }
 
-  const staticPicks = []; let notePicks = [];
-  function pickable(obj, pick){ obj.traverse(o => { if(o.isMesh){ o.userData.pick = pick; staticPicks.push(o); } }); }
+  const staticPicks = []; let notePicks = [];   // staticPicks: an invisible shape per desk (mergeStatic)
 
   /* ---------- room ---------- */
   const RX = 15, RZ = 11;
@@ -1654,7 +1726,7 @@ function start(){
     const cc = opt.chair || '#4a3f33';
     cyl(.3, .3, .04, 5, '#2b2622', 0, .03, 0, ch); cyl(.04, .04, .42, 6, '#2b2622', 0, .24, 0, ch);
     box(.62, .09, .56, cc, 0, .47, 0, ch); box(.6, .62, .08, cc, 0, .84, -.28, ch);
-    return {g, mon, screenM, W, Dp, chair:ch};
+    return {g, mon, scr, screenM, W, Dp, chair:ch};
   }
 
   /* each bot is a small rig: root (on the floor at the seat, turned to face where they walk) -> hips -> knees for the
@@ -1764,7 +1836,6 @@ function start(){
     const p = POS[b.id]; if(!p) return;
     const d = buildDesk(p.x, p.z, {big:p.big, mug:b.color});
     const c = buildChar(b, d.g);
-    pickable(d.g, {bot:b.id});
     const notes = new THREE.Group(); d.g.add(notes);
     DESKS.push({b, d, c, notes, phase: Math.random()*6.28, working:false, idle:false});
   });
@@ -1781,7 +1852,6 @@ function start(){
   const tl = new THREE.Mesh(new THREE.PlaneGeometry(.6, .1), new THREE.MeshStandardMaterial({map:trayLabel})); tl.position.set(0, .06, .227); tray.add(tl);
   const papers = new THREE.Group(); tray.add(papers);
   const paperGeo = new THREE.BoxGeometry(.5, .012, .34);
-  pickable(Z.g, {zeno:true});
 
   /* ---------- Founder's corner office (Zeno) ---------- */
   const FO = {x0:6.8, x1:RX, z0:-RZ, z1:-3.8};
@@ -1843,8 +1913,7 @@ function start(){
     const ballG = ball(.045, '#ffffff', 0, .05, 0, scene, true, 1); ballG.visible = false;
     const crown = new THREE.Group(); head.add(crown); crown.position.y = .62;   // founder plumbob
     const pb = mesh(new THREE.OctahedronGeometry(.13, 0), mat('#7CFC8A', {emissive:'#2bd14a', emissiveIntensity:.6}), 0, 0, 0, crown, false); pb.scale.y = 1.7;
-    pickable(g, {person:'zeno'});   // Zeno himself is selected like the team; his desk keeps its menu
-    return {g, legL, legR, armL, armR, body, putter, ballG, pb};
+    return {g, legL, legR, armL, armR, body, head, putter, ballG, pb};
   })();
   const floorY = (x, z) => (x > FO.x0 && x < FO.x1 && z < FO.z1 && z > FO.z0) ? .12 : 0;
   /* ---------- walkable navmesh: grid + A*, so nobody walks through walls, glass or furniture ----------
@@ -2053,54 +2122,68 @@ function start(){
     g.beginPath(); g.arc(48, 48, 42, 0, Math.PI*2); g.fillStyle = '#1a1612'; g.fill(); g.lineWidth = 6; g.strokeStyle = '#fff'; g.stroke();
     g.fillStyle = '#fff'; g.font = '800 '+(n > 9 ? 32 : 40)+'px "Trebuchet MS", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('+'+n, 48, 51);
   }));
-  function disposeNotes(list){ list.forEach(o => { o.parent && o.parent.remove(o); o.material.dispose(); }); }
-  function refreshNotes(desk){
-    disposeNotes(desk.noteMeshes || []);
-    desk.noteMeshes = [];
-    const list = A.openTasks(desk.b.id), filt = A.state.filter !== 'all';
-    const shown = list.slice(0, NOTE_MAX), mid = (shown.length-1)/2;
-    const cx = desk.d.W/2*.4, z0 = desk.d.Dp/2-.22, y0 = .793;
-    shown.forEach((t, i) => {
-      const f = i - mid, op = filt && !t.match ? .16 : 1;
-      const x = cx + f*.14, z = z0 - Math.abs(f)*.025, rot = -f*.14, y = y0 + i*.0025;
-      const n = new THREE.Mesh(noteGeo, new THREE.MeshStandardMaterial({color:NOTE_COL[t.kind], roughness:.95, transparent:op<1, opacity:op, side:THREE.DoubleSide}));
-      n.userData.pick = {task:t.k}; n.receiveShadow = true;
-      const parts = [n];
-      if(t.kind === 'need'){
-        const back = new THREE.Mesh(noteBackGeo, new THREE.MeshBasicMaterial({color:'#990F3D', transparent:op<1, opacity:op, side:THREE.DoubleSide}));
-        back.userData.pick = {task:t.k}; parts.push(back);
-      }
-      parts.forEach((m, j) => {
-        m.rotation.set(-Math.PI/2, 0, rot); m.position.set(x, y - j*.0012, z);
-        desk.notes.add(m); desk.noteMeshes.push(m);
-      });
-    });
-    const more = list.length - shown.length;
-    if(more > 0){
-      const m = new THREE.Mesh(plusGeo, new THREE.MeshBasicMaterial({map:plusMap(more), transparent:true}));
-      m.rotation.x = -Math.PI/2; m.position.set(cx + (mid+1)*.14 + .06, y0 + .015, z0);
-      m.userData.pick = {bot:desk.b.id, list:true};   // "+N more": the bot's full task list
-      desk.notes.add(m); desk.noteMeshes.push(m);
-    }
+  /* every desk's notes are drawn by four InstancedMeshes: the paper and the crimson back of a needs-you note, each
+     solid or dimmed by the filter. A tap finds its task from the instance it hit. Only "+N" discs are meshes of their own */
+  const NOTE_CAP = 64, _no = new THREE.Object3D(), _nc = new THREE.Color();
+  function noteSet(geo, M){
+    const im = new THREE.InstancedMesh(geo, M, NOTE_CAP); im.count = 0; im.frustumCulled = false; im.receiveShadow = true;
+    im.userData.picks = []; scene.add(im); return im;
   }
-  function refresh(){
-    notePicks = [];
+  const NOTES = [
+    noteSet(noteGeo, new THREE.MeshStandardMaterial({roughness:.95, side:THREE.DoubleSide})),
+    noteSet(noteGeo, new THREE.MeshStandardMaterial({roughness:.95, side:THREE.DoubleSide, transparent:true, opacity:.16})),
+    noteSet(noteBackGeo, new THREE.MeshBasicMaterial({color:'#990F3D', side:THREE.DoubleSide})),
+    noteSet(noteBackGeo, new THREE.MeshBasicMaterial({color:'#990F3D', side:THREE.DoubleSide, transparent:true, opacity:.16}))];
+  function refreshNotes(){
+    NOTES.forEach(im => { im.count = 0; im.userData.picks.length = 0; });
+    const plus = [];
     DESKS.forEach(desk => {
-      const id = desk.b.id, c = A.counts(id);
-      refreshNotes(desk);
+      if(desk.plus){ desk.notes.remove(desk.plus); desk.plus.material.dispose(); desk.plus = null; }
+      desk.notes.updateWorldMatrix(true, false);
+      const list = A.openTasks(desk.b.id), filt = A.state.filter !== 'all';
+      const shown = list.slice(0, NOTE_MAX), mid = (shown.length-1)/2;
+      const cx = desk.d.W/2*.4, z0 = desk.d.Dp/2-.22, y0 = .793;
+      shown.forEach((t, i) => {
+        const f = i - mid, dim = filt && !t.match;
+        const x = cx + f*.14, z = z0 - Math.abs(f)*.025, rot = -f*.14, y = y0 + i*.0025;
+        const add = (im, yy, col) => {
+          if(im.count >= NOTE_CAP) return;
+          const k = im.count++;
+          _no.position.set(x, yy, z); _no.rotation.set(-Math.PI/2, 0, rot); _no.updateMatrix(); _no.matrix.premultiply(desk.notes.matrixWorld);
+          im.setMatrixAt(k, _no.matrix); if(col) im.setColorAt(k, _nc.set(col)); im.userData.picks[k] = {task:t.k};
+        };
+        add(NOTES[dim ? 1 : 0], y, NOTE_COL[t.kind]);
+        if(t.kind === 'need') add(NOTES[dim ? 3 : 2], y - .0012);
+      });
+      const more = list.length - shown.length;
+      if(more > 0){
+        const m = new THREE.Mesh(plusGeo, new THREE.MeshBasicMaterial({map:plusMap(more), transparent:true}));
+        m.rotation.x = -Math.PI/2; m.position.set(cx + (mid+1)*.14 + .06, y0 + .015, z0);
+        m.userData.pick = {bot:desk.b.id, list:true};   // "+N more": the bot's full task list
+        desk.notes.add(m); desk.plus = m; plus.push(m);
+      }
+    });
+    NOTES.forEach(im => { im.instanceMatrix.needsUpdate = true; if(im.instanceColor) im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); });   // the sphere is what a tap is tested against first
+    notePicks = NOTES.concat(plus);
+  }
+  /* the tray's papers, one per thing that needs Zeno (up to 14): one InstancedMesh */
+  const PAPER_MAX = 14, paperSet = new THREE.InstancedMesh(paperGeo, new THREE.MeshStandardMaterial({roughness:.82, flatShading:true}), PAPER_MAX);
+  paperSet.castShadow = paperSet.receiveShadow = true; paperSet.count = 0; papers.add(paperSet);
+  function refresh(){
+    refreshNotes();
+    DESKS.forEach(desk => {
+      const c = A.counts(desk.b.id);
       desk.working = (c.work + c.need) > 0;
       desk.idle = c.open === 0;
       desk.d.screenM.emissiveIntensity = desk.working ? .6 : .15;
-      notePicks.push(...desk.noteMeshes);
     });
     HB.forEach(B => { B.data = A.bubble(B.id); B.dim = B.id !== 'zeno' && A.isDim(B.id); });
-    const n = A.needCount();
-    papers.clear();
-    for(let i=0;i<Math.min(n, 14);i++){
-      const p = new THREE.Mesh(paperGeo, mat(i%3 ? '#f6efe6' : '#ffffff'));
-      p.position.set(((i*13)%5-2)*.006, .04+i*.016, ((i*7)%3-1)*.008); p.rotation.y = ((i*5)%7-3)*.035; p.castShadow = true;
-      papers.add(p);
+    const n = Math.min(A.needCount(), PAPER_MAX);
+    for(let i = 0; i < n; i++){
+      _no.position.set(((i*13)%5-2)*.006, .04+i*.016, ((i*7)%3-1)*.008); _no.rotation.set(0, ((i*5)%7-3)*.035, 0); _no.updateMatrix();
+      paperSet.setMatrixAt(i, _no.matrix); paperSet.setColorAt(i, _nc.set(i%3 ? '#f6efe6' : '#ffffff'));
     }
+    paperSet.count = n; paperSet.instanceMatrix.needsUpdate = true; if(paperSet.instanceColor) paperSet.instanceColor.needsUpdate = true;
   }
 
   /* ---------- camera: MapControls-style rig (createMapCam, below) ---------- */
@@ -2419,7 +2502,7 @@ function start(){
     ptr.set(((cx-r.left)/r.width)*2-1, -((cy-r.top)/r.height)*2+1);
     ray.setFromCamera(ptr, camera);
     const hit = ray.intersectObjects(CAPS.concat(notePicks, staticPicks), false)[0];
-    return hit ? hit.object.userData.pick : null;
+    return hit ? (hit.object.userData.picks ? hit.object.userData.picks[hit.instanceId] : hit.object.userData.pick) : null;
   }
   /* taps come from the camera rig (onTap), so a drag never opens anything */
   let hoverId = null, moveQ = null;
@@ -2689,11 +2772,120 @@ function start(){
   }
   A.scene = {where, pose, errand, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom};
 
-  /* ---------- loop ---------- */
+  /* ---------- fewer draw calls: what never moves is merged, one mesh per kind of material ----------
+     The office is built from about 800 small meshes, each its own draw call. The furniture never moves, so once it is
+     built its meshes are merged into a few (each piece keeps its colour, as a vertex colour). What moves or changes is
+     left as it is: people, sticky notes, the tray's papers, the screens, the cutaway walls and what hangs on them.
+     A tap on a desk is picked on an invisible copy of that desk's own pieces */
+  function mergeMeshes(list, color){
+    let n = 0;
+    const parts = list.map(o => { const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrixWorld); n += g.attributes.position.count; return [g, o.material.color]; });
+    const pos = new Float32Array(n*3), nor = new Float32Array(n*3), col = color ? new Float32Array(n*3) : null;
+    let k = 0;
+    parts.forEach(([g, c]) => {
+      const P = g.attributes.position, N = g.attributes.normal;
+      pos.set(P.array, k*3); if(N) nor.set(N.array, k*3);
+      if(col) for(let i = 0; i < P.count; i++){ col[(k+i)*3] = c.r; col[(k+i)*3+1] = c.g; col[(k+i)*3+2] = c.b; }
+      k += P.count; g.dispose();
+    });
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    if(col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    out.computeBoundingSphere();
+    return out;
+  }
+  /* the bots' pieces: one InstancedMesh for each kind of piece (same shape and finish), one instance per bot per piece,
+     placed every frame from the rig joint it hangs on; the bot's own colour is the instance's colour. 11 bots of about
+     30 pieces each come to a few dozen draw calls. Zeno, who is one of a kind, gets each joint's pieces merged */
+  const PEOPLE = [];
+  function instancePeople(){
+    const groups = new Map();
+    DESKS.forEach(dk => dk.c.root.traverse(o => {
+      if(!o.isMesh || CAPS.includes(o)) return;   // the hit capsule stays a mesh of its own
+      const g = o.geometry, m = o.material;
+      const k = [g.type, JSON.stringify(g.parameters), m.roughness, m.metalness, m.flatShading, m.transparent, m.opacity, o.castShadow].join('|');
+      if(!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(o);
+    }));
+    groups.forEach(list => {
+      const first = list[0], m = first.material;
+      const M = new THREE.MeshStandardMaterial({roughness:m.roughness, metalness:m.metalness, flatShading:m.flatShading, transparent:m.transparent, opacity:m.opacity});
+      const im = new THREE.InstancedMesh(first.geometry, M, list.length);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.castShadow = first.castShadow; im.receiveShadow = true; im.frustumCulled = false;   // they walk all over: never culled as one
+      const slots = list.map((o, i) => { im.setColorAt(i, o.material.color); o.updateMatrix(); return {node:o.parent, local:o.matrix.clone()}; });
+      list.forEach(o => { o.parent.remove(o); if(o.geometry !== first.geometry) o.geometry.dispose(); });
+      scene.add(im); PEOPLE.push({im, slots});
+    });
+    syncPeople();
+  }
+  const _pm = new THREE.Matrix4();
+  function syncPeople(){
+    DESKS.forEach(dk => dk.c.root.updateMatrixWorld(true));
+    PEOPLE.forEach(P => { P.slots.forEach((S, i) => P.im.setMatrixAt(i, _pm.multiplyMatrices(S.node.matrixWorld, S.local))); P.im.instanceMatrix.needsUpdate = true; });
+  }
+  /* one mesh for a joint's own pieces (vertex colours, in the joint's frame); see-through and glowing ones stay apart */
+  function mergeNode(node){
+    const list = node.children.filter(o => o.isMesh && !CAPS.includes(o) && o.material.isMeshStandardMaterial && !o.material.map && !o.material.transparent &&
+      (o.material.emissiveIntensity === 0 || o.material.emissive.getHex() === 0));
+    if(list.length < 2) return;
+    const m = list[0].material, cast = list.some(o => o.castShadow);
+    list.forEach(o => { o.updateMatrix(); o.matrixWorld.copy(o.matrix); });   // mergeMeshes bakes matrixWorld: here the joint-local one
+    const one = new THREE.Mesh(mergeMeshes(list, true), new THREE.MeshStandardMaterial({vertexColors:true, roughness:m.roughness, metalness:0, flatShading:true}));
+    one.castShadow = cast; one.receiveShadow = true;
+    list.forEach(o => { node.remove(o); o.geometry.dispose(); });
+    node.add(one);
+  }
+  function mergeZeno(){ [ZC.g, ZC.legL, ZC.legR, ZC.body, ZC.head, ZC.armL, ZC.armR, ZC.putter].forEach(mergeNode); }
+  function mergeStatic(){
+    scene.updateMatrixWorld(true);
+    const keep = new Set([...DESKS.map(dk => dk.c.root), ...DESKS.map(dk => dk.notes), ...DESKS.map(dk => dk.d.scr), Z.scr, ZC.g, ZC.ballG, papers,
+      selRing, kick, paper, ...WALLS.flatMap(W => [W.wall, W.cap, ...W.hung])]);
+    const kept = o => { for(let q = o; q; q = q.parent) if(keep.has(q)) return true; return false; };
+    const pickShape = (g, pick) => {
+      const list = []; g.traverse(o => { if(o.isMesh && !kept(o)) list.push(o); });
+      const m = new THREE.Mesh(mergeMeshes(list, false), new THREE.MeshBasicMaterial());
+      m.visible = false; m.userData.pick = pick; m.userData.pickOnly = true; scene.add(m);
+      return m;
+    };
+    WALLS.forEach(W => {   // what hangs on a cutaway wall: one mesh per material, still hidden with the wall
+      const by = new Map(); W.hung.forEach(o => { if(!by.has(o.material)) by.set(o.material, []); by.get(o.material).push(o); });
+      W.hung = [...by.values()].map(list => {
+        if(list.length < 2) return list[0];
+        const one = new THREE.Mesh(mergeMeshes(list, false), list[0].material); one.receiveShadow = true; scene.add(one); keep.add(one);
+        list.forEach(o => { o.parent.remove(o); o.geometry.dispose(); });
+        return one;
+      });
+    });
+    staticPicks.length = 0;   // the people are picked by their capsules, the desks by their shapes
+    DESKS.forEach(dk => staticPicks.push(pickShape(dk.d.g, {bot:dk.b.id})));
+    staticPicks.push(pickShape(Z.g, {zeno:true}));
+    const plain = m => m.isMeshStandardMaterial && !m.map && (m.emissiveIntensity === 0 || m.emissive.getHex() === 0);
+    const groups = new Map();
+    scene.traverse(o => {
+      if(!o.isMesh || o.isInstancedMesh || o.userData.pickOnly || kept(o) || !plain(o.material)) return;
+      const m = o.material, k = [m.transparent, m.opacity, m.roughness, m.metalness, m.flatShading, m.depthWrite, m.side, o.castShadow, o.receiveShadow].join();
+      if(!groups.has(k)) groups.set(k, {m, cast:o.castShadow, recv:o.receiveShadow, list:[]});
+      groups.get(k).list.push(o);
+    });
+    groups.forEach(G => {
+      const m = G.m, M = new THREE.MeshStandardMaterial({vertexColors:true, roughness:m.roughness, metalness:m.metalness, flatShading:m.flatShading,
+        transparent:m.transparent, opacity:m.opacity, depthWrite:m.depthWrite, side:m.side});
+      const one = new THREE.Mesh(mergeMeshes(G.list, true), M);
+      one.castShadow = G.cast; one.receiveShadow = G.recv; scene.add(one);
+      G.list.forEach(o => { o.parent.remove(o); o.geometry.dispose(); });
+    });
+  }
+
+  /* ---------- loop ----------
+     Nothing is drawn (or moves) while the office can't be seen: off screen, in a hidden tab, or under the full sheet, a
+     task or the Desk PC. It carries on from where it stopped */
   const clock = new THREE.Clock();
+  let onScreen = true;
+  new IntersectionObserver(es => { onScreen = es[es.length - 1].isIntersecting; }).observe(stage);
   function frame(){
     requestAnimationFrame(frame);
-    if(A.state.covered || document.hidden) return;   // nothing to draw while the full sheet hides the office
+    if(document.hidden || !onScreen || A.state.covered || A.state.modalOn || A.state.pc || !lastW || !lastH) return;
     const t = clock.getElapsedTime();
     const _dt = Math.min(.05, t - (frame.lt || t)); frame.lt = t;
     zenoTick(t);
@@ -2717,10 +2909,12 @@ function start(){
       });
     }
     markTick(t);
+    syncPeople();
     renderer.render(scene, camera);
     layoutBubbles();
     drawMap();
   }
+  instancePeople(); mergeZeno(); mergeStatic();
   frame();
   A.ready();
 }
@@ -2953,6 +3147,9 @@ function createMapCam(o){
     } else g = null;
   }
   function capture(id){ try{ el.setPointerCapture(id); }catch(err){} }
+  /* drop the gesture in hand: pointers whose lift never came (the phone turned mid-touch, the system took the touch)
+     would otherwise make the next one-finger drag a pinch with a ghost finger */
+  function cancel(){ ptrs.clear(); g = null; seq = null; el.classList.remove('panning'); }
   function begin(){
     if(seq.cap) return;
     seq.cap = true; seq.moved = true;
@@ -2960,6 +3157,7 @@ function createMapCam(o){
     el.classList.add('panning'); moved();
   }
   el.addEventListener('pointerdown', e => {
+    if(e.isPrimary && ptrs.size && !ptrs.has(e.pointerId)) cancel();   // a first finger while others are on record: they are stale
     if(skip(e.target) || ptrs.size >= 2) return;
     if(e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
     const wasMoving = !!(anim || fling);   // a touch that stops a glide or a coasting pan only stops it: no tap, no click
@@ -3115,6 +3313,7 @@ function createMapCam(o){
     home: goHome,
     state(){ return Object.assign(snap(), {polar:polar(), minDist:lim.minDist, maxDist:lim.maxDist, azMin:lim.azMin, azMax:lim.azMax, home:home && Object.assign({}, home)}); },
     busy(){ return !!(anim || fling || ptrs.size); },
+    cancel,
     dragging(){ return ptrs.size > 0; }
   };
 }
@@ -3210,12 +3409,12 @@ function createMapCam(o){
       o.innerHTML='<div class="mon"><div class="scr"><div class="pcbar"><span style="font-size:22px">💻</span><b>Desk PC</b><small>'+new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kuching",hour:"2-digit",minute:"2-digit"})+' (UTC+8)</small><button class="x" type="button">Stand up ✕</button></div><div class="grid">'+
         APPS.map(function(a){return '<a class="app" target="_blank" rel="noopener" href="'+esc(a[2])+'"><span>'+a[0]+'</span><b>'+esc(a[1])+'</b><i>'+esc(a[3])+'</i></a>';}).join("")+
         '</div><h3 class="pghd">📄 My Pages</h3><div class="note" style="margin:0 0 10px">🔒 Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
-      document.body.appendChild(o); window.zenoPC&&window.zenoPC(true);
+      document.body.appendChild(o); window.zenoPC&&window.zenoPC(true); if(window.BotOffice) window.BotOffice.state.pc=true;   /* the office under it isn't drawn */
       fetch("pages.json?v="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){
         var g=o.querySelector("#pcPages"); if(!g) return;
         g.innerHTML=(j.pages||[]).map(function(a){ var tile='<span>'+esc(a.icon)+'</span><b>'+esc(a.name)+'</b><i>'+esc(a.group)+'</i>'; return /^https:\/\/cursor\.com\//.test(a.url) ? '<a class="app" target="_blank" rel="noopener" href="'+esc(a.url)+'">'+tile+'</a>' : '<div class="app" title="Link kept private">'+tile+'</div>'; }).join("") || '<div class="note">No Pages found.</div>';
       }).catch(function(){ var g=o.querySelector("#pcPages"); if(g) g.innerHTML='<div class="note">Couldn\u2019t load your Pages. Check your connection and sit down again.</div>'; });
-      function shut(){o.remove();removeEventListener("keydown",k);window.zenoStand&&window.zenoStand();} function k(e){if(e.key==="Escape")shut();}
+      function shut(){o.remove();removeEventListener("keydown",k);if(window.BotOffice) window.BotOffice.state.pc=false;window.zenoStand&&window.zenoStand();} function k(e){if(e.key==="Escape")shut();}
       addEventListener("keydown",k); o.querySelector(".x").onclick=shut; o.onclick=function(e){if(e.target===o)shut();};
       o.querySelector("a.app").focus();
     },650);
