@@ -91,8 +91,8 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 .legend b{font-weight:700;color:var(--ink);margin-right:2px}
 .legend span{display:inline-flex;align-items:center;gap:5px}
 .legend i{width:11px;height:11px;border-radius:2px;display:inline-block;box-shadow:0 1px 0 rgba(0,0,0,.2)}
-/* the first-visit gesture hint sits just above the camera buttons (the room chips own the top strip) */
-.hint{position:absolute;bottom:66px;left:50%;transform:translate(-50%,calc(var(--sheet-vis) * -1));z-index:6;width:max-content;max-width:calc(100% - 24px);text-align:center;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.35;color:var(--ink2);background:rgba(255,250,244,.94);border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;transition:opacity .5s,transform .32s cubic-bezier(.2,.8,.2,1)}
+/* the first-visit gesture hint sits above the camera buttons and the minimap (the room chips own the top strip) */
+.hint{position:absolute;bottom:100px;left:50%;transform:translate(-50%,calc(var(--sheet-vis) * -1));z-index:3;width:max-content;max-width:calc(100% - 24px);text-align:center;text-wrap:balance;font-size:12px;font-weight:600;line-height:1.35;color:var(--ink2);background:rgba(255,250,244,.94);border:1.5px solid var(--line);border-radius:999px;padding:5px 12px;pointer-events:none;transition:opacity .5s,transform .32s cubic-bezier(.2,.8,.2,1)}
 .hint:empty{display:none}
 .hint.gone{opacity:0}
 #app.dragging .hint{transition:opacity .5s}
@@ -105,9 +105,11 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 .rchip .rl,.rooms.wide .rchip .rs{display:none}
 .rooms.wide .rchip .rl{display:inline}
 #app.sheet-full .rooms{visibility:hidden}
-/* minimap: the floor plan from above (back wall at the top), under the room chips; tap or drag it to move the view */
-.minimap{position:absolute;left:10px;top:60px;z-index:7;width:112px;height:80px;display:block;border:2px solid var(--ink);border-radius:12px;background:var(--paper2);box-shadow:3px 3px 0 rgba(26,22,18,.15);touch-action:none;cursor:pointer}
+/* minimap: the floor plan from above (back wall at the top); tap or drag it to move the view */
+.minimap{position:absolute;left:10px;bottom:10px;z-index:7;width:min(112px,calc(100% - 272px));height:auto;aspect-ratio:7/5;display:block;border:2px solid var(--ink);border-radius:12px;background:var(--paper2);box-shadow:3px 3px 0 rgba(26,22,18,.15);touch-action:none;cursor:pointer;
+  transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}   /* bottom left, riding above the sheet beside the camera buttons; narrower on small phones */
 .minimap[hidden],.stage.nogl .minimap{display:none}
+#app.dragging .minimap{transition:none}
 #app.sheet-full .minimap{visibility:hidden}
 /* camera buttons: one row, bottom right under the thumb, riding just above the sheet (zoom nearest the thumb) */
 .camctl{position:absolute;right:10px;bottom:10px;z-index:7;display:flex;gap:6px;transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}
@@ -217,8 +219,11 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
   .grab,.chev{display:none}
   .sheetbody{padding-bottom:28px}
   .syncbtn .lg{display:inline}
+  .hint{left:auto;right:10px;bottom:66px;transform:none;max-width:calc(100% - 144px)}   /* right of the minimap, over the camera buttons */
 }
-@media (orientation:landscape) and (max-height:540px){:root{--side-w:320px}.syncbtn .lg{display:none}}
+@media (orientation:landscape) and (max-height:540px){:root{--side-w:320px}.syncbtn .lg{display:none}
+  .rooms{right:auto;flex-direction:column;align-items:stretch}   /* a short office: the room chips stack down its left edge, above the minimap */
+}
 .qlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .qcard{width:100%;text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;transition:border-color .15s,transform .15s}
 .qcard:hover{border-color:var(--ink);transform:translateX(-2px)}
@@ -1207,12 +1212,12 @@ cardSum.addEventListener("click", function(){
    transforms move (the sheet and the camera buttons); --sheet-vis is written once, on release.
    A portrait held still for LONG ms opens that person's whole task list: it arms on a timer (the face grows) and is
    decided on release by the events' own timestamps, so a busy page can't stretch a quick tap into a long-press. */
-var sheetEl=document.getElementById("sheet"), camBtns=document.getElementById("camctl");
+var sheetEl=document.getElementById("sheet"), camBtns=document.getElementById("camctl"), mapBox=document.getElementById("minimap");
 var hd=null, LONG=480, barAnim=0, REDUCE=window.matchMedia("(prefers-reduced-motion: reduce)");
 function sheetDragTo(d, vis){
   sheetVis=Math.max(d.hs.peek, Math.min(d.hs.full, vis));
   sheetEl.style.transform="translateY("+(d.hs.full-sheetVis)+"px)";
-  camBtns.style.transform="translateY("+(-sheetVis)+"px)";
+  camBtns.style.transform=mapBox.style.transform="translateY("+(-sheetVis)+"px)";
 }
 function disarm(d){ clearTimeout(d.timer); if(d.el) d.el.classList.remove("armed"); }
 function headMove(e){
@@ -1244,7 +1249,7 @@ function headUp(e){
   if(d.kind==="sheet"){
     var v=dt>0 && !rested ? (b[2]-a[2])/dt : 0, aim=sheetVis-v*200, hs=d.hs, best="peek";   /* px per ms, + is down */
     ["half","full"].forEach(function(k){ if(Math.abs(hs[k]-aim) < Math.abs(hs[best]-aim)) best=k; });
-    sheetEl.style.transform=""; camBtns.style.transform="";
+    sheetEl.style.transform=""; camBtns.style.transform=""; mapBox.style.transform="";
     sheetSet(best);
   } else if(d.kind==="bar"){
     var vx=dt>0 && !rested ? (b[1]-a[1])/dt : 0;
@@ -1981,14 +1986,21 @@ function start(){
      clamp); measured once per resize or sheet move, not on every camera update */
   function stageRects(){
     if(rects) return rects;
-    const r = stage.getBoundingClientRect(), below = A.sheet.peek() + camctl.offsetHeight + 18;
+    const r = stage.getBoundingClientRect(), below = A.sheet.peek() + camctl.offsetHeight + 18, hud = hudInsets(), top = hud.top + 20;   // + the far row's bubbles
     /* the camera buttons sit at the bottom right, above the sheet: where they reach the middle, where people are
        framed, that strip is not free for them (laid out, not measured: the buttons may be sliding with the sheet) */
     const bw = camctl.hidden ? 0 : camctl.offsetWidth, strip = bw && r.width - 10 - bw < r.width/2 + 60 ? camctl.offsetHeight + 10 : 0;
     return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible()), below:strip},
-                    free: {x:r.left + 8, y:r.top + 8, w:r.width - 16, h:Math.max(60, r.height - below - 8)}};
+                    free: {x:r.left + hud.left, y:r.top + top, w:r.width - hud.left - 8, h:Math.max(60, r.height - below - top)}};
   }
-  const roomsEl = document.getElementById('rooms');
+  /* the room chips over the office: a row across its top, or on a short landscape screen a column down its left edge
+     (with the minimap under it). Home and the rooms are framed clear of them */
+  function hudInsets(){
+    if(roomsEl.hidden || !roomsEl.offsetHeight) return {top:0, left:8};
+    if(roomsEl.offsetHeight > roomsEl.offsetWidth) return {top:0, left:Math.max(roomsEl.offsetLeft + roomsEl.offsetWidth, mapEl.hidden ? 0 : mapEl.offsetLeft + mapEl.offsetWidth) + 8};
+    return {top:roomsEl.offsetTop + roomsEl.offsetHeight + 8, left:8};
+  }
+  const roomsEl = document.getElementById('rooms'), mapEl = document.getElementById('minimap');
   let activeRoom = null, roomGoing = false;   // the room chip pressed now; true while a chip itself moves the camera
   const cam = createMapCam({
     camera, el: stage, canvas: renderer.domElement, buttons: camctl, reduce,
@@ -2022,8 +2034,8 @@ function start(){
   }
   /* the part of the office a room is framed in: what you can see now, under the chips' strip, above the camera buttons */
   function roomRect(){
-    const v = stageRects().view, top = 60, bot = Math.max(v.below || 0, camctl.offsetHeight + 18);
-    return {x:v.x + 8, y:v.y + top, w:v.w - 16, h:Math.max(40, v.h - top - bot)};
+    const v = stageRects().view, hud = hudInsets(), top = hud.top + 20, bot = Math.max(v.below || 0, camctl.offsetHeight + 18);
+    return {x:v.x + hud.left, y:v.y + top, w:v.w - hud.left - 8, h:Math.max(40, v.h - top - bot)};
   }
   function goRoom(id, ms){
     const R = ROOMS[id]; if(!R) return false;
@@ -2041,7 +2053,6 @@ function start(){
   /* ---------- minimap: the floor plan from above, back wall at the top ----------
      Drawn from the obstacle rectangles the walkers steer round. People are dots in their bubble's colour (Zeno gold),
      the selected one ringed; the steel patch is the floor the camera shows now. Tap it to look there, drag to move. */
-  const mapEl = document.getElementById('minimap');
   const MAP = {pad:3, s:0, w:0, h:0, dpr:0, ox:0, oz:0, base:null};
   const DOT = {need:'#990F3D', work:'#2f7d4f', wait:'#006F9B', inbox:'#b9ab9a', idle:'#b9ab9a', zeno:'#C89132'};
   const mx = x => MAP.ox + x*MAP.s, my = z => MAP.oz + z*MAP.s;
@@ -2138,11 +2149,12 @@ function start(){
     HB.forEach(B => { B.key = ''; });   // re-measure the bubbles lazily
     measureObstacles();
   }
-  /* overlays bubbles must not sit under: the camera buttons, the hint, and the strip of office the sheet covers */
+  /* overlays bubbles must not sit under: the camera buttons, the room chips, the minimap, the follow pill and the strip
+     of office the sheet covers. Not the first-visit hint: bubbles carry the board, so they draw over it while it shows */
   let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
-    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill, mapEl, ...roomsEl.querySelectorAll('.rchip')].filter(Boolean).map(el => {
+    obstacles = [camctl, followPill.hidden ? null : followPill, mapEl, ...roomsEl.querySelectorAll('.rchip')].filter(Boolean).map(el => {
       const r = el.getBoundingClientRect();
       return {x:r.left-ox, y:r.top-oy, w:r.width, h:r.height};
     }).filter(r => r.w && r.h);
