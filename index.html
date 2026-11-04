@@ -105,6 +105,10 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 .rchip .rl,.rooms.wide .rchip .rs{display:none}
 .rooms.wide .rchip .rl{display:inline}
 #app.sheet-full .rooms{visibility:hidden}
+/* minimap: the floor plan from above (back wall at the top), under the room chips; tap or drag it to move the view */
+.minimap{position:absolute;left:10px;top:60px;z-index:7;width:112px;height:80px;display:block;border:2px solid var(--ink);border-radius:12px;background:var(--paper2);box-shadow:3px 3px 0 rgba(26,22,18,.15);touch-action:none;cursor:pointer}
+.minimap[hidden],.stage.nogl .minimap{display:none}
+#app.sheet-full .minimap{visibility:hidden}
 /* camera buttons: one row, bottom right under the thumb, riding just above the sheet (zoom nearest the thumb) */
 .camctl{position:absolute;right:10px;bottom:10px;z-index:7;display:flex;gap:6px;transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}
 .camctl[hidden]{display:none}
@@ -421,6 +425,7 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
       <button type="button" class="rchip" data-room="lounge" aria-pressed="false" aria-label="Lounge"><span class="rl">Lounge</span><span class="rs">Lounge</span></button>
       <button type="button" class="rchip" data-room="green" aria-pressed="false" aria-label="Putting green"><span class="rl">Putting green</span><span class="rs">Green</span></button>
     </div>
+    <canvas class="minimap" id="minimap" role="img" aria-label="Office map from above. Tap or drag it to move the view." hidden></canvas>
     <div class="camctl" id="camctl" role="group" aria-label="Camera" hidden>
       <div class="camgrp"><button type="button" data-cam="home" aria-label="Show the whole office" title="Whole office"><svg viewBox="0 0 24 24"><path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5.5h4V20"/></svg></button></div>
       <div class="camgrp"><button type="button" data-cam="left" aria-label="Rotate anticlockwise" title="Rotate anticlockwise"><svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6L3.5 8.5"/><path d="M3.5 3.5v5h5"/></svg></button><button type="button" data-cam="right" aria-label="Rotate clockwise" title="Rotate clockwise"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6l2.5 2.5"/><path d="M20.5 3.5v5h-5"/></svg></button></div>
@@ -1788,7 +1793,7 @@ function start(){
     }
     // true inside a real obstacle (no inflation) — used by the self-check
     const inside = (x, z) => hit(x, z, 0);
-    return {find, inside, free:(x,z)=>free(...cell(x,z))};
+    return {find, inside, free:(x,z)=>free(...cell(x,z)), rects:solid};
   })();
   // idle loop: every stop is open floor; legs between stops are pathfound
   const ROUTE = [[8,-5.4],[GREEN.x,GREEN.z,'putt'],[-1,-3.1],[-7.5,-3.1],[-7.5,2.2],[2.5,2.2,'look'],[12.6,2.2],[12.8,-3.15,'coffee'],[12.8,-5.2]];
@@ -1978,6 +1983,80 @@ function start(){
   }
   roomsEl.addEventListener('click', e => { const b = e.target.closest('.rchip'); if(b) goRoom(b.dataset.room); });
   roomsEl.hidden = false;
+
+  /* ---------- minimap: the floor plan from above, back wall at the top ----------
+     Drawn from the obstacle rectangles the walkers steer round. People are dots in their bubble's colour (Zeno gold),
+     the selected one ringed; the steel patch is the floor the camera shows now. Tap it to look there, drag to move. */
+  const mapEl = document.getElementById('minimap');
+  const MAP = {pad:3, s:0, w:0, h:0, dpr:0, ox:0, oz:0, base:null};
+  const DOT = {need:'#990F3D', work:'#2f7d4f', wait:'#006F9B', inbox:'#b9ab9a', idle:'#b9ab9a', zeno:'#C89132'};
+  const mx = x => MAP.ox + x*MAP.s, my = z => MAP.oz + z*MAP.s;
+  function mapSize(){
+    const w = mapEl.clientWidth, h = mapEl.clientHeight, dpr = Math.min(3, window.devicePixelRatio || 1);
+    if(!w || !h) return false;
+    if(w === MAP.w && h === MAP.h && dpr === MAP.dpr) return true;
+    Object.assign(MAP, {w, h, dpr, ox:w/2, oz:h/2, s:Math.min((w - 2*MAP.pad)/(2*RX), (h - 2*MAP.pad)/(2*RZ))});
+    mapEl.width = Math.round(w*dpr); mapEl.height = Math.round(h*dpr);
+    const c = document.createElement('canvas'); c.width = mapEl.width; c.height = mapEl.height;
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    const area = (x0, z0, x1, z1, col) => { g.fillStyle = col; g.fillRect(mx(x0), my(z0), (x1 - x0)*MAP.s, (z1 - z0)*MAP.s); };
+    area(-RX, -RZ, RX, RZ, '#ecd3ae');                      // floor
+    area(SO.x0, SO.z0, SO.x1, SO.z1, '#dbe7ec');            // CEO corner
+    area(FO.x0, FO.z0, FO.x1, FO.z1, '#7a5236');            // the founder office's walnut dais
+    area(8, 7.6, 13, 10.8, '#f0c9a0');                      // lounge rug
+    g.fillStyle = '#4caf50'; g.beginPath(); g.arc(mx(4), my(-6.2), 1.55*MAP.s, 0, Math.PI*2); g.fill();   // putting green
+    NAV.rects.forEach(r => area(r[0], r[1], r[2], r[3], 'rgba(26,22,18,.3)'));   // desks, glass, furniture
+    g.strokeStyle = '#1a1612'; g.lineWidth = 1.5; g.strokeRect(mx(-RX), my(-RZ), 2*RX*MAP.s, 2*RZ*MAP.s);
+    MAP.base = c;
+    return true;
+  }
+  function drawMap(){
+    if(mapEl.hidden || !mapSize()) return;
+    const g = mapEl.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, mapEl.width, mapEl.height); g.drawImage(MAP.base, 0, 0);
+    g.setTransform(MAP.dpr, 0, 0, MAP.dpr, 0, 0);
+    const v = stageRects().view, q = [[v.x, v.y], [v.x + v.w, v.y], [v.x + v.w, v.y + v.h], [v.x, v.y + v.h]].map(p => cam.floorAt(p[0], p[1]));
+    if(q.every(Boolean)){   // the floor in view (above the sheet), clipped to the room
+      g.save(); g.beginPath(); g.rect(mx(-RX), my(-RZ), 2*RX*MAP.s, 2*RZ*MAP.s); g.clip();
+      g.beginPath(); q.forEach((p, i) => i ? g.lineTo(mx(p[0]), my(p[1])) : g.moveTo(mx(p[0]), my(p[1]))); g.closePath();
+      g.fillStyle = 'rgba(0,111,155,.22)'; g.fill(); g.strokeStyle = '#006F9B'; g.lineWidth = 1.2; g.stroke(); g.restore();
+    }
+    HB.forEach(B => {
+      const w = where(B.id); if(!w || !B.data) return;
+      const r = B.id === 'zeno' ? 3.3 : 2.7, x = mx(w.x), y = my(w.z);
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI*2); g.fillStyle = DOT[B.data.kind]; g.fill(); g.lineWidth = 1; g.strokeStyle = '#fff'; g.stroke();
+      if(B.id === marked){ g.beginPath(); g.arc(x, y, r + 2.3, 0, Math.PI*2); g.strokeStyle = '#1a1612'; g.lineWidth = 1.4; g.stroke(); }
+    });
+  }
+  function mapWorld(cx, cy){
+    const r = mapEl.getBoundingClientRect(), x = (cx - r.left - mapEl.clientLeft - MAP.ox)/MAP.s, z = (cy - r.top - mapEl.clientTop - MAP.oz)/MAP.s;
+    return [Math.max(-RX, Math.min(RX, x)), Math.max(-RZ, Math.min(RZ, z))];
+  }
+  /* a tap glides there; a drag moves the view with the finger (the camera rig never sees these touches) */
+  let mapDrag = null;
+  mapEl.addEventListener('pointerdown', e => {
+    if(e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    try{ mapEl.setPointerCapture(e.pointerId); }catch(err){}
+    mapDrag = {id:e.pointerId, x0:e.clientX, y0:e.clientY, moved:false};
+  });
+  mapEl.addEventListener('pointermove', e => {
+    const d = mapDrag; if(!d || e.pointerId !== d.id) return;
+    if(!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
+    d.moved = true; cam.travel(mapWorld(e.clientX, e.clientY), 0);
+  });
+  function mapUp(e){
+    const d = mapDrag; if(!d || e.pointerId !== d.id) return;
+    mapDrag = null;
+    if(e.type === 'pointerup' && !d.moved) cam.travel(mapWorld(e.clientX, e.clientY), 420);
+  }
+  mapEl.addEventListener('pointerup', mapUp); mapEl.addEventListener('pointercancel', mapUp);
+  mapEl.addEventListener('contextmenu', e => e.preventDefault());
+  window.officeMap = {
+    toMap(x, z){ const r = mapEl.getBoundingClientRect(); return [r.left + mapEl.clientLeft + mx(x), r.top + mapEl.clientTop + my(z)]; },
+    toWorld: mapWorld
+  };
+  mapEl.hidden = false;
   /* the gesture hint and the stage label match the device: fingers on touch screens, mouse and keys elsewhere */
   const coarse = matchMedia('(pointer: coarse)');
   function describe(){
@@ -2009,7 +2088,7 @@ function start(){
   let obstacles = [], obsTimer = 0;
   function measureObstacles(){
     const sr = stage.getBoundingClientRect(), ox = sr.left + stage.clientLeft, oy = sr.top + stage.clientTop;
-    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill, ...roomsEl.querySelectorAll('.rchip')].filter(Boolean).map(el => {
+    obstacles = [camctl, hintEl.classList.contains('gone') ? null : hintEl, followPill.hidden ? null : followPill, mapEl, ...roomsEl.querySelectorAll('.rchip')].filter(Boolean).map(el => {
       const r = el.getBoundingClientRect();
       return {x:r.left-ox, y:r.top-oy, w:r.width, h:r.height};
     }).filter(r => r.w && r.h);
@@ -2362,6 +2441,7 @@ function start(){
     markTick(t);
     renderer.render(scene, camera);
     layoutBubbles();
+    drawMap();
   }
   frame();
   A.ready();
@@ -2579,7 +2659,7 @@ function createMapCam(o){
   /* ---- pointers: one finger pans; two pinch, twist and pan; a short touch that does not move is a tap ---- */
   const ptrs = new Map();
   let g = null, seq = null, track = [], tapTimer = 0, lastTap = null, second = false, lastType = '';
-  const skip = t => !!(t && t.closest && t.closest('.camctl, .fallback, .followpill'));
+  const skip = t => !!(t && t.closest && t.closest('.camctl, .fallback, .followpill, .rooms, .minimap'));
   function regroup(){   // re-base the gesture whenever a finger lands or lifts, so nothing jumps
     const P = [...ptrs.values()];
     if(P.length === 1){
@@ -2742,6 +2822,9 @@ function createMapCam(o){
       ['dist', 'az', 'tilt'].forEach(k => { if(to[k] != null) end[k] = to[k]; });
       unfollow(); limit(end); moved(); glide(end, ms == null ? 500 : ms, [end.tx, end.tz]);
     },
+    /* look at floor point P: it moves to the middle of the part of the office you can see, same zoom and angle (the
+       minimap). The user's choice, so it ends follow like a pan */
+    travel(P, ms){ unfollow(); moved(); glide(solve(snap(), P, centre()), ms == null ? 420 : ms, P); },
     /* a preset view: points as big as possible in screen rect r, from the best of azs; it is the user's choice, so
        it ends follow like a pan */
     fitTo(points, azs, r, ms){
