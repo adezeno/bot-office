@@ -846,7 +846,9 @@ function carries(issue, r){
 /* clear the marks that are settled. open: the open GitHub requests when just read; aged: GitHub couldn't be asked, so a
    day is enough. A mark stays while its request is open on GitHub; without one it goes once a day old, or once a sync
    two hours after it still shows nothing */
+function readPending(){ try { return JSON.parse(localStorage.getItem(PEND_KEY)||"{}") || {}; } catch(e){ return {}; } }
 function prune(open, aged){
+  pending=readPending();   /* another tab may have withdrawn or sent one since */
   var changed=false, now=Date.now(), synced=Date.parse(D.syncedAt||"")||0;
   Object.keys(pending).forEach(function(id){
     var r=pending[id], t=taskById(id), at=sentAt(r), drop=!r || !t || applied(r,t) || (t.stage==="Done" && r.action!=="done");
@@ -861,18 +863,20 @@ function prune(open, aged){
   return changed;
 }
 prune();
-/* ask GitHub which requests are open only when that settles a mark (at most every 5 minutes) */
+/* ask GitHub which requests are open only when that settles a mark, and at most every 5 minutes for all tabs (its
+   unauthenticated limit, 60 an hour, is shared with the "Last applied" check): an answer or a failure is remembered */
 function checkRequests(){
+  if(document.hidden) return;
   var now=Date.now(), synced=Date.parse(D.syncedAt||"")||0;
   var ask=Object.keys(pending).some(function(id){ var r=pending[id], at=sentAt(r); return r.issue || now-at > DAY || (synced && synced-at >= SYNC_GRACE); });
   if(!ask) return;
-  var c=null; try{ c=JSON.parse(sessionStorage.getItem("gtIssues")||"null"); }catch(e){}
-  (c && now-c.t < 3e5 ? Promise.resolve(c.list) : fetch(ISSUES_API, {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(list){
+  var c=null; try{ c=JSON.parse(localStorage.getItem("gtIssues")||"null"); }catch(e){}
+  var keep=function(list){ try{ localStorage.setItem("gtIssues", JSON.stringify({t:Date.now(), list:list})); }catch(e){} };
+  (c && now-c.t < 3e5 && now >= c.t ? (c.list ? Promise.resolve(c.list) : Promise.reject(new Error("failed lately"))) : fetch(ISSUES_API, {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(list){
     if(!Array.isArray(list)) throw new Error("not a list");
     list=list.filter(function(i){ return !i.pull_request; }).map(function(i){ return {number:i.number, title:i.title, body:i.body}; });
-    try{ sessionStorage.setItem("gtIssues", JSON.stringify({t:Date.now(), list:list})); }catch(e){}
-    return list;
-  })).then(refreshPend).catch(function(){ refreshPend(null, true); });
+    keep(list); return list;
+  }, function(err){ keep(null); throw err; })).then(refreshPend).catch(function(){ refreshPend(null, true); });
 }
 /* how long ago: just now, 5 min ago, 3 h ago, 2 days ago */
 function ago(r){
@@ -881,10 +885,11 @@ function ago(r){
 }
 /* the marks settle (open: GitHub's open requests, when just read); what changed is drawn again, else the ages move on */
 function refreshPend(open, aged){
-  if(prune(open, aged)){ refreshTaskViews(""); return; }
+  if(prune(open, aged)){ pendViews(); return; }
   document.querySelectorAll("[data-sent]").forEach(function(e){ var r=pending[e.dataset.sent]; if(r){ var a=(e.dataset.long ? "sent " : "Pending sync · ")+ago(r); if(e.textContent!==a) e.textContent=a; } });
 }
 setInterval(function(){ refreshPend(); checkRequests(); }, 6e4);
+window.addEventListener("storage", function(e){ if(e.key===PEND_KEY){ pending=readPending(); pendViews(); } });   /* marks changed in another tab */
 document.addEventListener("visibilitychange", function(){ if(!document.hidden){ refreshPend(); checkRequests(); } });
 checkRequests();
 /* first names only in anything that leaves the page (never [CLIENT], so Jarvis can still act on it) */
@@ -931,7 +936,7 @@ function requestChange(t, action, value){
   else { unsent[t.id]=r; delete withdrawn[t.id]; }
   refreshTaskViews(t.id);
 }
-function markSent(id, r){ pending[id]=r; delete unsent[id]; delete withdrawn[id]; savePending(); }
+function markSent(id, r){ pending=readPending(); pending[id]=r; delete unsent[id]; delete withdrawn[id]; savePending(); }
 function copyText(s, btn){
   function ok(){ if(btn){ var o=btn.textContent; btn.textContent="Copied ✓"; setTimeout(function(){btn.textContent=o;},1600);} }
   function legacy(){
@@ -949,9 +954,10 @@ function pendHTML(t){
   var r = pending[t.id], u = unsent[t.id], w = withdrawn[t.id];
   if(r) return '<div class="pend" role="status"><span class="pchip">Pending sync</span><span>Asked Jarvis to '+asked(r)+', <span data-sent="'+esc(t.id)+'" data-long="1">sent '+ago(r)+'</span>. Not on the board yet.'+
       (r.issue ? ' Request #'+esc(r.issue)+' is open on GitHub.' : '')+'</span>'+
-    '<span class="pacts"><a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>'+
+    '<span class="pacts">'+(r.issue ? '<a href="https://github.com/adezeno/bot-office/issues/'+esc(r.issue)+'" target="_blank" rel="noopener">See request #'+esc(r.issue)+'</a>'
+      : '<a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>')+
     '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button>'+
-    '<button type="button" class="linkbtn" data-withdraw="'+esc(t.id)+'">Withdraw</button></span></div>';
+    '<button type="button" class="linkbtn" data-withdraw="'+esc(t.id)+'">'+(r.issue ? 'Clear this mark' : 'Withdraw')+'</button></span></div>';
   if(u) return '<div class="pend" role="status"><span>GitHub didn\u2019t open (a pop-up blocker?), so nothing was sent.</span>'+
     '<span class="pacts"><a href="'+esc(issueURL(u))+'" target="_blank" rel="noopener" data-sendlink="'+esc(t.id)+'">Open the request on GitHub</a>'+
     '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button></span></div>';
@@ -970,6 +976,18 @@ function actsHTML(t){
     '<form class="nextform" data-id="'+id+'" hidden><input type="text" name="next" value="'+esc(cur)+'" aria-label="New next step for '+id+'" maxlength="300">'+
       '<button type="submit" class="abtn">Send</button><small class="pubwarn">This becomes public. First names only, no numbers.</small></form>'+
   '</div>';
+}
+/* a mark settled in the background: the lists and the card are drawn again, and in an open task only its request strip
+   is swapped, so a next step being typed there keeps its text and the cursor */
+function pendViews(){
+  renderFloor(); renderBar();
+  if(sel) renderCard();
+  var m=document.getElementById("modal"), t=state.modal && m.classList.contains("on") && byKey(state.modal);
+  if(!t) return;
+  var box=m.querySelector(".pend"), html=pendHTML(t), had=box && box.contains(document.activeElement);
+  if(box && html) box.outerHTML=html; else if(box) box.remove();
+  else if(html){ var f=m.querySelector(".field .acts"); if(f) f.insertAdjacentHTML("beforebegin", html); }
+  if(had){ var c=m.querySelector(".pend [data-copy], .pend a, .acts button"); if(c) c.focus(); }
 }
 /* re-render whatever is showing this task, keeping focus on its request strip in the task modal */
 function refreshTaskViews(id){
@@ -1338,10 +1356,10 @@ function endHead(){
 }
 sheetHead.addEventListener("pointerdown", function(e){
   if(e.pointerType==="mouse" && e.button!==0) return;
-  if(hd && hd.id!==e.pointerId){ if(!e.isPrimary) return; endHead(); }   /* a second finger doesn't take over; a new first one means the old lift was lost */
+  if(hd && hd.id!==e.pointerId){ if(!e.isPrimary || e.pointerType!==hd.type) return; endHead(); }   /* a second finger doesn't take over; a new first one (same kind) means the old lift was lost */
   cancelAnimationFrame(barAnim);
   var pb=e.target.closest && e.target.closest(".pb");
-  hd={id:e.pointerId, x0:e.clientX, y0:e.clientY, t0:e.timeStamp, kind:null, onBar:!!(e.target.closest && e.target.closest("#pbar")),
+  hd={id:e.pointerId, type:e.pointerType, x0:e.clientX, y0:e.clientY, t0:e.timeStamp, kind:null, onBar:!!(e.target.closest && e.target.closest("#pbar")),
       sl0:pbar.scrollLeft, vis0:sheetVis, s:[[e.timeStamp, e.clientX, e.clientY]], pick:pb ? pb.dataset.pick : null, el:pb};
   if(pb) hd.timer=setTimeout(function(){ pb.classList.add("armed"); }, LONG);
   window.addEventListener("pointermove", headMove, true);
@@ -1405,7 +1423,7 @@ document.addEventListener("click", function(e){
     return;
   }
   if((el = e.target.closest("[data-copy]"))){ var pr=pending[el.dataset.copy] || unsent[el.dataset.copy]; if(pr) copyText(reqSentence(pr), el); return; }
-  if((el = e.target.closest("[data-withdraw]"))){ var wid=el.dataset.withdraw; if(pending[wid]){ withdrawn[wid]=pending[wid]; delete pending[wid]; savePending(); refreshTaskViews(wid); } return; }
+  if((el = e.target.closest("[data-withdraw]"))){ var wid=el.dataset.withdraw; pending=readPending(); if(pending[wid]){ withdrawn[wid]=pending[wid]; delete pending[wid]; savePending(); refreshTaskViews(wid); } return; }
   if((el = e.target.closest("[data-sendlink]"))){ var sid=el.dataset.sendlink; if(unsent[sid]){ markSent(sid, unsent[sid]); setTimeout(function(){ refreshTaskViews(sid); }, 0); } return; }   /* the link opens GitHub itself */
   if((el = e.target.closest("[data-task]"))){ e.stopPropagation(); openModal(el.dataset.task); return; }
   if((el = e.target.closest("[data-gobot]"))){ closeModal(); select(el.dataset.gobot, {list:true}); return; }
@@ -1635,7 +1653,7 @@ function start(){
 
   function rug(w, d, color, x, z, round){
     const g = round ? new THREE.CylinderGeometry(w/2, w/2, .03, 28) : new THREE.BoxGeometry(w, .03, d);
-    return mesh(g, mat(color, {flatShading:false, roughness:1}), x, .015, z, scene, false);
+    return mesh(g, mat(color, {roughness:1}), x, .015, z, scene, false);
   }
   function plant(x, z, s){
     const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s || 1); scene.add(g);
@@ -1711,7 +1729,8 @@ function start(){
   function buildDesk(x, z, opt){
     const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
     const W = opt.big ? 2.7 : 2.0, Dp = opt.big ? 1.2 : 1.0;
-    box(W, .08, Dp, opt.big ? '#6e4a2f' : '#b98552', 0, .75, 0, g);
+    const top = opt.big ? '#6e4a2f' : '#b98552';
+    box(W, .08, Dp, top, 0, .75, 0, g);
     box(W-.1, .4, .05, opt.big ? '#5a3c26' : '#a7774a', 0, .5, Dp/2-.06, g);   // modesty panel
     [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sz]) => box(.07, .71, .07, '#3a312a', sx*(W/2-.08), .355, sz*(Dp/2-.08), g));
     // monitor: screen faces the bot, back faces the room (sticky notes go on the back)
@@ -1726,7 +1745,7 @@ function start(){
     const cc = opt.chair || '#4a3f33';
     cyl(.3, .3, .04, 5, '#2b2622', 0, .03, 0, ch); cyl(.04, .04, .42, 6, '#2b2622', 0, .24, 0, ch);
     box(.62, .09, .56, cc, 0, .47, 0, ch); box(.6, .62, .08, cc, 0, .84, -.28, ch);
-    return {g, mon, scr, screenM, W, Dp, chair:ch};
+    return {g, mon, scr, screenM, W, Dp, chair:ch, top};
   }
 
   /* each bot is a small rig: root (on the floor at the seat, turned to face where they walk) -> hips -> knees for the
@@ -1757,7 +1776,8 @@ function start(){
     ball(.032, '#1a1612', -.085, .02, .225, eyes, false, 1); ball(.032, '#1a1612', .085, .02, .225, eyes, false, 1);
     const smile = new THREE.Mesh(new THREE.TorusGeometry(.05, .013, 4, 8, Math.PI), mat('#1a1612'));
     smile.position.set(0, -.075, .232); smile.rotation.z = Math.PI; head.add(smile);
-    const blush = mat('#e57373', {transparent:true, opacity:.45});
+    const sk = new THREE.Color(b.skin).getHex(), mix = (sh) => Math.round(((sk >> sh) & 255)*.55 + ((0xe57373 >> sh) & 255)*.45) << sh;
+    const blush = mat('#' + (mix(16) | mix(8) | mix(0)).toString(16).padStart(6, '0'));   // the old 45% pink over the skin, as one colour
     ball(.03, blush, -.15, -.05, .19, head, false); ball(.03, blush, .15, -.05, .19, head, false);
     if(b.acc !== 'cap' && b.acc !== 'beret'){
       const bald = (b.id === 'steve' || b.id === 'ray');
@@ -2021,7 +2041,7 @@ function start(){
   ZC.g.position.set(zs.x, .12, zs.z);
   const Z_STRIDE = .62, Z_TURN = 7, SIT_SECS = .5;   // a step is 0.62 m; turns at up to 7 rad/s; half a second to sit or stand
   const sideX = () => 10 + Z.W/2 + .45;               // beside his desk, level with the chair
-  function goTo(path, onArrive){ zs.path = path.slice(); zs.mode = 'go'; zs.onArrive = onArrive; ZC.putter.visible = false; ZC.ballG.visible = false; }
+  function goTo(path, onArrive){ zs.path = path.slice(); zs.mode = 'go'; zs.onArrive = onArrive; zs.stepOut = false; ZC.putter.visible = false; ZC.ballG.visible = false; }
   /* to his chair: round to the side of the desk, then sideways in front of the chair (never through its back) */
   function chairPath(){
     Z.chair.updateMatrixWorld(true); Z.chair.getWorldPosition(CHAIR);
@@ -2040,7 +2060,7 @@ function start(){
     if(zs.mode === 'go'){ zs.path = []; zs.onArrive = null; zs.mode = 'walk'; zs.leg = null; return; }
     if(zs.mode === 'sit' || zs.mode === 'sitdown'){ zs.mode = 'rise'; zs.onArrive = null; }
   };
-  window.zenoSeated = () => zs.mode === 'sit';
+  window.zenoSeated = () => zs.mode === 'sit' || zs.mode === 'sitdown';
   window.zenoPC = on => { Z.screenM.emissive.set(on ? '#7fe0ff' : '#000000'); Z.screenM.emissiveIntensity = on ? .7 : 0; };
   function legPose(a){ ZC.legL.rotation.x = a; ZC.legR.rotation.x = -a; ZC.armL.rotation.x = -a*.8; ZC.armR.rotation.x = a*.8; }
   /* turn towards a heading at no more than Z_TURN rad/s, the short way round */
@@ -2065,12 +2085,13 @@ function start(){
       if(d < .06){
         zs.x = target[0]; zs.z = target[1];
         if(zs.mode === 'go'){ zs.path.shift(); if(!zs.path.length){ zs.mode = 'sitdown'; zs.k = 0; } }
+        else if(zs.stepOut){ zs.leg = null; zs.stepOut = false; }   // out beside the desk: on round the office
         else { zs.leg.shift(); if(!zs.leg.length){ const stop = ROUTE[zs.i]; zs.leg = null; zs.i = (zs.i+1) % ROUTE.length; if(stop[2]){ zs.mode = stop[2]; zs.timer = 0; } } }
       } else {
         const s = Math.min(d, SPEED*dt); zs.x += dx/d*s; zs.z += dz/d*s; moved = s;
         turnZ(Math.atan2(dx, dz), dt);
       }
-      if(zs.mode !== 'sitdown' && zs.mode !== 'sit' && !(zs.mode==='go' && zs.path.length <= 1) && NAV.inside(zs.x, zs.z) && Math.hypot(zs.x-CHAIR.x, zs.z-CHAIR.z) > .8){ zs.bad++; }
+      if(zs.mode !== 'sitdown' && zs.mode !== 'sit' && !zs.stepOut && !(zs.mode==='go' && zs.path.length <= 1) && NAV.inside(zs.x, zs.z) && Math.hypot(zs.x-CHAIR.x, zs.z-CHAIR.z) > .8){ zs.bad++; }
     }
     if(zs.mode !== 'sitdown' && zs.mode !== 'rise' && zs.mode !== 'sit') ZC.g.position.set(zs.x, floorY(zs.x, zs.z), zs.z);
     /* the stride follows the ground covered (P2-5: the same steps per metre strolling or hurrying), easing in and out */
@@ -2110,7 +2131,7 @@ function start(){
       zs.stand = 1 - e; zs.x = CHAIR.x; zs.z = CHAIR.z;
       if(zs.mode === 'sitdown' && zs.k >= 1){ zs.mode = 'sit'; const f = zs.onArrive; zs.onArrive = null; f && f(); }
       if(zs.mode === 'rise' && zs.k <= 0){   // up again: step out beside the desk, then on round the office
-        zs.mode = 'walk'; zs.i = 0; zs.leg = [[sideX(), CHAIR.z]]; zs.stand = 1; }
+        zs.mode = 'walk'; zs.i = 0; zs.leg = [[sideX(), CHAIR.z]]; zs.stepOut = true; zs.stand = 1; }
     } else if(zs.mode !== 'walk' && zs.mode !== 'go') zs.stand = 1;
   }
   window.__zenoTick = zenoTick;
@@ -2129,11 +2150,11 @@ function start(){
     const im = new THREE.InstancedMesh(geo, M, NOTE_CAP); im.count = 0; im.frustumCulled = false; im.receiveShadow = true;
     im.userData.picks = []; scene.add(im); return im;
   }
-  const NOTES = [
-    noteSet(noteGeo, new THREE.MeshStandardMaterial({roughness:.95, side:THREE.DoubleSide})),
-    noteSet(noteGeo, new THREE.MeshStandardMaterial({roughness:.95, side:THREE.DoubleSide, transparent:true, opacity:.16})),
-    noteSet(noteBackGeo, new THREE.MeshBasicMaterial({color:'#990F3D', side:THREE.DoubleSide})),
-    noteSet(noteBackGeo, new THREE.MeshBasicMaterial({color:'#990F3D', side:THREE.DoubleSide, transparent:true, opacity:.16}))];
+  /* both use the bots' shader (lit, flat, instance colours): no extra shader to compile at load. They face up, and the
+     camera is always above the floor */
+  const NOTES = [noteSet(noteGeo, new THREE.MeshStandardMaterial({roughness:.95, flatShading:true})),
+    noteSet(noteBackGeo, new THREE.MeshStandardMaterial({roughness:.95, flatShading:true}))];
+  const _dc = new THREE.Color();
   function refreshNotes(){
     NOTES.forEach(im => { im.count = 0; im.userData.picks.length = 0; });
     const plus = [];
@@ -2144,16 +2165,17 @@ function start(){
       const shown = list.slice(0, NOTE_MAX), mid = (shown.length-1)/2;
       const cx = desk.d.W/2*.4, z0 = desk.d.Dp/2-.22, y0 = .793;
       shown.forEach((t, i) => {
-        const f = i - mid, dim = filt && !t.match;
+        const f = i - mid, dim = filt && !t.match;   // filtered out: faded 84% into the desk top
         const x = cx + f*.14, z = z0 - Math.abs(f)*.025, rot = -f*.14, y = y0 + i*.0025;
         const add = (im, yy, col) => {
           if(im.count >= NOTE_CAP) return;
           const k = im.count++;
           _no.position.set(x, yy, z); _no.rotation.set(-Math.PI/2, 0, rot); _no.updateMatrix(); _no.matrix.premultiply(desk.notes.matrixWorld);
-          im.setMatrixAt(k, _no.matrix); if(col) im.setColorAt(k, _nc.set(col)); im.userData.picks[k] = {task:t.k};
+          _nc.set(col); if(dim) _nc.lerp(_dc.set(desk.d.top), .84);
+          im.setMatrixAt(k, _no.matrix); im.setColorAt(k, _nc); im.userData.picks[k] = {task:t.k};
         };
-        add(NOTES[dim ? 1 : 0], y, NOTE_COL[t.kind]);
-        if(t.kind === 'need') add(NOTES[dim ? 3 : 2], y - .0012);
+        add(NOTES[0], y, NOTE_COL[t.kind]);
+        if(t.kind === 'need') add(NOTES[1], y - .0012, '#990F3D');
       });
       const more = list.length - shown.length;
       if(more > 0){
@@ -2168,7 +2190,7 @@ function start(){
   }
   /* the tray's papers, one per thing that needs Zeno (up to 14): one InstancedMesh */
   const PAPER_MAX = 14, paperSet = new THREE.InstancedMesh(paperGeo, new THREE.MeshStandardMaterial({roughness:.82, flatShading:true}), PAPER_MAX);
-  paperSet.castShadow = paperSet.receiveShadow = true; paperSet.count = 0; papers.add(paperSet);
+  paperSet.castShadow = true; paperSet.count = 0; papers.add(paperSet);
   function refresh(){
     refreshNotes();
     DESKS.forEach(desk => {
@@ -2188,7 +2210,7 @@ function start(){
 
   /* ---------- camera: MapControls-style rig (createMapCam, below) ---------- */
   const camctl = document.getElementById('camctl'), hintEl = document.getElementById('hint'), followPill = document.getElementById('followPill');
-  let lastW = 0, lastH = 0, lastPeek = -1, hintTimer = 0, rects = null;
+  let lastW = 0, lastH = 0, lastPeek = -1, hintTimer = 0, rects = null, redraw = false;   // redraw: a resize cleared the canvas while paused
   /* the office the user can see now, and the part the sheet and the camera buttons leave free (home framing, room
      clamp); measured once per resize or sheet move, not on every camera update */
   function stageRects(){
@@ -2352,7 +2374,7 @@ function start(){
     const w = stage.clientWidth, h = stage.clientHeight;
     if(!w || !h || (w === lastW && h === lastH)) return;
     lastW = w; lastH = h;
-    renderer.setSize(w, h, false);
+    renderer.setSize(w, h, false); redraw = true;   // setSize clears the canvas: drawn again even if the loop is paused
     camera.aspect = w/h; camera.updateProjectionMatrix();
     roomsEl.classList.toggle('wide', w >= 560);   // full room names where they fit on one row
     /* a short screen on its side: the chips stack down the left edge; the minimap only shows where it fits under them */
@@ -2582,7 +2604,7 @@ function start(){
     const S = plan.seat, mv = [{m:'rise', label:'out'}, {m:'walk', pts:out, label:'out'}];
     if(S) mv.push({m:'walk', pts:[S.via], slow:true, label:'there'}, {m:'turn', head:S.rot, label:'there'}, {m:'sit', to:S.at, y:S.y, label:'there'});
     mv.push({m:'stay', label:'there'});
-    if(S) mv.push({m:'rise', to:S.via, label:'there'}, {m:'walk', pts:[stops[stops.length-1]], slow:true, label:'there'});
+    if(S) mv.push({m:'rise', to:S.via, label:'back'}, {m:'walk', pts:[stops[stops.length-1]], slow:true, label:'back'});
     mv.push({m:'walk', back:true, label:'back'}, {m:'turn', head:0, label:'back'}, {m:'sit', label:'back'}, {m:'done'});
     const [sx, sz] = seatOf(dk);
     walkers.push({dk, plan, meetWith, mv, label:'out', out, x:sx, z:sz, yo:0, head:0, timer:0});
@@ -2649,6 +2671,7 @@ function start(){
       paper.position.set(0, 1.36 + c.body.position.y, .5); c.root.localToWorld(paper.position); paper.rotation.y = w.head;
     }
     poseBot(c, o); capTo(w.dk.cap, RISE*c.stand);
+    c.eyes.scale.y = ((t + w.dk.phase) % 4.3) < .12 ? .1 : 1;
     /* away from the desk the head looks where it goes (down at the ball, at the paper), not still at the screen */
     const hx = m.m === 'stay' && w.plan.act === 'keepy' ? .35 : m.m === 'stay' && w.plan.act === 'sofa' ? .1 : .02, kk = Math.min(1, dt*6);
     c.head.rotation.x += (hx - c.head.rotation.x)*kk; c.head.rotation.y += (0 - c.head.rotation.y)*kk;
@@ -2679,6 +2702,7 @@ function start(){
   {
     const ringM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
     const ring = new THREE.Mesh(new THREE.RingGeometry(RING_R - .12, RING_R, 48), ringM); ring.rotation.x = -Math.PI/2; selRing.add(ring);
+    ring.renderOrder = 1;   // it writes no depth: drawn after the floor's rugs (now one merged mesh), or they paint over it
     const waveM = new THREE.MeshBasicMaterial({color:'#C89132', toneMapped:false, transparent:true, opacity:.6, side:THREE.DoubleSide, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
     const wave = new THREE.Mesh(new THREE.RingGeometry(.62, .68, 48), waveM); wave.rotation.x = -Math.PI/2; selRing.add(wave);
     selRing.userData.wave = wave;
@@ -2707,7 +2731,7 @@ function start(){
   const figure = id => ({get fig(){ return BUB_Y(id) + riseOf(id); }, pad:CHIP_H, ring:RING_R});   // read each frame: a walker stands taller
   /* what the person is doing, read from the scene and the task data only: no invented moods */
   const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
-  const ZENO_DOING = {sit:['🪑', 'At the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
+  const ZENO_DOING = {sit:['🪑', 'At the desk'], sitdown:['🪑', 'Sitting down at the desk'], rise:['🧍', 'Getting up from the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
   function activity(id){
     let a;
     if(id === 'zeno'){
@@ -2869,9 +2893,10 @@ function start(){
       groups.get(k).list.push(o);
     });
     groups.forEach(G => {
-      const m = G.m, M = new THREE.MeshStandardMaterial({vertexColors:true, roughness:m.roughness, metalness:m.metalness, flatShading:m.flatShading,
+      const m = G.m, same = G.list.every(o => o.material === m);   // one material (glass, gold, water): kept, no vertex colours
+      const M = same ? m : new THREE.MeshStandardMaterial({vertexColors:true, roughness:m.roughness, metalness:m.metalness, flatShading:m.flatShading,
         transparent:m.transparent, opacity:m.opacity, depthWrite:m.depthWrite, side:m.side});
-      const one = new THREE.Mesh(mergeMeshes(G.list, true), M);
+      const one = new THREE.Mesh(mergeMeshes(G.list, !same), M);
       one.castShadow = G.cast; one.receiveShadow = G.recv; scene.add(one);
       G.list.forEach(o => { o.parent.remove(o); o.geometry.dispose(); });
     });
@@ -2885,7 +2910,11 @@ function start(){
   new IntersectionObserver(es => { onScreen = es[es.length - 1].isIntersecting; }).observe(stage);
   function frame(){
     requestAnimationFrame(frame);
-    if(document.hidden || !onScreen || A.state.covered || A.state.modalOn || A.state.pc || !lastW || !lastH) return;
+    if(document.hidden || !onScreen || A.state.covered || A.state.modalOn || A.state.pc || !lastW || !lastH){
+      cam.update(performance.now());   // a glide in flight still ends on time (unseen), so uncovering never cuts across the room
+      if(redraw && lastW && lastH && !document.hidden){ redraw = false; syncPeople(); renderer.render(scene, camera); layoutBubbles(); }   // round a task on a computer
+      return;
+    }
     const t = clock.getElapsedTime();
     const _dt = Math.min(.05, t - (frame.lt || t)); frame.lt = t;
     zenoTick(t);
@@ -2910,7 +2939,7 @@ function start(){
     }
     markTick(t);
     syncPeople();
-    renderer.render(scene, camera);
+    renderer.render(scene, camera); redraw = false;
     layoutBubbles();
     drawMap();
   }
@@ -3157,7 +3186,9 @@ function createMapCam(o){
     el.classList.add('panning'); moved();
   }
   el.addEventListener('pointerdown', e => {
-    if(e.isPrimary && ptrs.size && !ptrs.has(e.pointerId)) cancel();   // a first finger while others are on record: they are stale
+    const kind = ptrs.size ? ptrs.values().next().value.type : e.pointerType;
+    if(kind !== e.pointerType) return;   // a mouse or pen landing during a finger's gesture (or the reverse) stays out of it
+    if(e.isPrimary && ptrs.size && !ptrs.has(e.pointerId)) cancel();   // "primary" is per type: a new first finger means the old ones' lifts were lost
     if(skip(e.target) || ptrs.size >= 2) return;
     if(e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
     const wasMoving = !!(anim || fling);   // a touch that stops a glide or a coasting pan only stops it: no tap, no click
@@ -3403,6 +3434,7 @@ function createMapCam(o){
   function openPC(){
     if(document.querySelector(".pc,.sitfx")) return;
     var tip=document.createElement("div");tip.className="sitfx";tip.textContent="🪑 Zeno heads to his desk…";document.body.appendChild(tip);
+    if(window.BotOffice && window.BotOffice.sheet.get()==="full") window.BotOffice.sheet.set("half");   /* the office isn't drawn under a full sheet: Zeno would stand still */
     var go=function(f){ var done=false, t2=setTimeout(function(){ if(!done){done=true;f();} },15000); tip.innerHTML='🪑 Zeno is walking over… <button type="button" style="margin-left:8px;min-height:40px;border-radius:999px;border:2px solid #1a1612;background:#fff;font-weight:700">Cancel</button>'; tip.querySelector('button').onclick=function(){ done=true; clearTimeout(t2); tip.remove(); window.zenoStand&&window.zenoStand(); }; if(window.zenoSit) window.zenoSit(function(){ if(!done){done=true;clearTimeout(t2);setTimeout(f,400);} }); else setTimeout(f,650); };
     go(function(){ tip.remove();
       var o=document.createElement("div");o.className="pc";o.setAttribute("role","dialog");o.setAttribute("aria-label","Your desk computer: dashboards");
