@@ -5,11 +5,16 @@ on:
     types: [opened]
 permissions:
   contents: write
-  issues: write
+  issues: read
 concurrency: { group: sync, cancel-in-progress: false }  # runs one at a time
 jobs:
   sync:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.labels.*.name, 'office-change')
+    # request gate: only an office-change request the owner opened starts a run; tools/gate.py then checks the pause
+    # switch and every open request again, so a look-alike from another account is never applied
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (contains(github.event.issue.labels.*.name, 'office-change') &&
+      github.event.issue.user.login == 'adezeno' && github.event.issue.author_association == 'OWNER')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -822,6 +822,7 @@ function renderOwn(){
 var ISSUE_URL = "https://github.com/adezeno/bot-office/issues/new";
 var ISSUE_LIST = "https://github.com/adezeno/bot-office/issues?q=is%3Aissue+is%3Aopen+label%3Aoffice-change";
 var ISSUES_API = "https://api.github.com/repos/adezeno/bot-office/issues?state=open&labels=office-change&per_page=100";
+var OWNER = "adezeno";   /* only requests this account opened count, here and in the sync (tools/gate.py) */
 var PEND_KEY = "botoffice.pending.v1", DAY = 864e5, SYNC_GRACE = 2*36e5;
 var withdrawn = {}, unsent = {};   /* this visit only: a request just withdrawn, or one whose GitHub tab didn't open */
 var MOVE_STAGES = ["Inbox","Next","Doing","Waiting On","Needs Zeno","Done"];
@@ -874,7 +875,9 @@ function checkRequests(){
   var keep=function(list){ try{ localStorage.setItem("gtIssues", JSON.stringify({t:Date.now(), list:list})); }catch(e){} };
   (c && now-c.t < 3e5 && now >= c.t ? (c.list ? Promise.resolve(c.list) : Promise.reject(new Error("failed lately"))) : fetch(ISSUES_API, {cache:"no-store"}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(list){
     if(!Array.isArray(list)) throw new Error("not a list");
-    list=list.filter(function(i){ return !i.pull_request; }).map(function(i){ return {number:i.number, title:i.title, body:i.body}; });
+    /* the owner's own requests only: a look-alike from another account is never applied, so it can't settle a mark */
+    list=list.filter(function(i){ return !i.pull_request && i.user && i.user.login===OWNER && i.author_association==="OWNER"; })
+      .map(function(i){ return {number:i.number, title:i.title, body:i.body}; });
     keep(list); return list;
   }, function(err){ keep(null); throw err; })).then(refreshPend).catch(function(){ refreshPend(null, true); });
 }
