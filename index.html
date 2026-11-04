@@ -1057,6 +1057,7 @@ function select(id, opts){
   else sheetBody.scrollTop = 0;
   if(inSheet) cardSum.focus();
   selLive.textContent = cardTitle.textContent+". "+cardAct.textContent;
+  writeLink();
 }
 /* the whole task list at the top of the sheet. Only the sheet's own list scrolls: scrollIntoView also scrolled the
    office's container (#app, overflow hidden, with the sheet slid down inside it), so the office jumped up the screen */
@@ -1073,6 +1074,7 @@ function deselect(){
   sheetSet(back.snap);
   if(inCard){ var p = pbar.querySelector('[data-pick="'+was+'"]'); (p || sheetSum).focus(); }
   selLive.textContent = "";
+  writeLink();
 }
 /* follow: the camera keeps the person in the middle while they walk; a pan, the pill or the button ends it */
 function setFollow(on){
@@ -1119,12 +1121,14 @@ function openModal(k){ openedAt=Date.now();
   m.classList.add("on"); m.setAttribute("aria-hidden","false");
   document.getElementById("scrim").classList.add("on");
   box.querySelector(".x").focus();
+  writeLink();
 }
 function closeModal(){
   var m=document.getElementById("modal"); if(!m.classList.contains("on")) return;
   m.classList.remove("on"); m.setAttribute("aria-hidden","true");
   document.getElementById("scrim").classList.remove("on");
   if(lastFocus && lastFocus.focus) lastFocus.focus();
+  writeLink();
 }
 
 /* ---------- controls ---------- */
@@ -1303,6 +1307,7 @@ function showFallback(msg){
   fb.hidden = false;
   fb.innerHTML = '<div class="fbmsg">'+esc(msg)+'</div><div class="fbgrid"></div>';
   renderFloor();
+  startLink();
 }
 
 document.addEventListener("click", function(e){
@@ -1356,6 +1361,52 @@ document.addEventListener("keydown", function(e){
   else if(sheetSnap==="half" || sheetSnap==="full"){ sheetSet("peek"); sheetSum.focus(); }
 });
 
+/* ---------- deep links: #bot=miko, #room=founder, #task=AG-0024 ----------
+   A link goes straight there once the office is ready (or the plain list shows). As you move around, the link follows
+   what is open (a task, else a person, else a room chip), changed in place so Back still leaves the page and, after an
+   interruption, reopening the same link brings you back. Names and task ids are read loosely (#bot=Dato%20Moh) */
+var linkReady = false, linkMuted = false, linkRoom = null, ROOM_IDS = {founder:1, ceo:1, floor:1, lounge:1, green:1};
+function readLink(){
+  var q = {};
+  String(location.hash || "").replace(/^#/, "").split("&").forEach(function(p){
+    var i = p.indexOf("="), k, v; if(i < 1) return;
+    try { k = decodeURIComponent(p.slice(0, i)); v = decodeURIComponent(p.slice(i + 1)); } catch(e){ return; }
+    k = k.trim().toLowerCase(); v = v.trim(); if(v) q[k] = v;
+  });
+  return q;
+}
+function botFor(v){
+  var n = String(v).toLowerCase().replace(/[^a-z]/g, "");
+  if(n === "zeno") return "zeno";
+  for(var i = 0; i < BOTS.length; i++) if(BOTS[i].id === n || BOTS[i].name.toLowerCase().replace(/[^a-z]/g, "") === n) return BOTS[i].id;
+  return null;
+}
+function taskFor(v){ var id = String(v).trim().toUpperCase(); for(var i = 0; i < TASKS.length; i++) if(String(TASKS[i].id).toUpperCase() === id) return TASKS[i]; return null; }
+function linkNote(msg){
+  var st = document.getElementById("syncStat"); st.textContent = msg; st.style.color = "";
+  clearTimeout(linkNote.t); linkNote.t = setTimeout(function(){ if(st.textContent === msg) st.textContent = ""; }, 7000);
+}
+function applyLink(){
+  var q = readLink(), miss = [];
+  linkMuted = true;
+  try {
+    if(q.room){ var r = q.room.toLowerCase(); if(!ROOM_IDS[r]) miss.push("a room called “"+q.room+"”"); else if(A3() && A3().room) A3().room(r); }
+    if(q.bot){ var b = botFor(q.bot); if(b) select(b); else miss.push("“"+q.bot+"” in the office"); }
+    if(q.task){ var t = taskFor(q.task); if(t){ if(sel !== t.botId) select(t.botId); openModal(t._k); } else miss.push("task "+q.task+" on the board"); }
+  } finally { linkMuted = false; }
+  if(miss.length) linkNote("Couldn't find "+miss.join(" or ")+".");
+  writeLink();
+}
+function writeLink(){
+  if(linkMuted || !linkReady) return;
+  var t = state.modal && document.getElementById("modal").classList.contains("on") && byKey(state.modal);
+  var h = t && t.id ? "#task="+encodeURIComponent(t.id) : sel ? "#bot="+sel : linkRoom ? "#room="+linkRoom : "";
+  if((location.hash || "") === h) return;
+  try { history.replaceState(history.state, "", location.pathname + location.search + h); } catch(e){}
+}
+function startLink(){ if(linkReady) return; linkReady = true; if(location.hash) applyLink(); }
+window.addEventListener("hashchange", function(){ if(linkReady) applyLink(); });
+
 /* ---------- API for the 3D layer ---------- */
 window.BotOffice = {
   BOTS:BOTS, BY:BY, state:state, counts:counts, isDim:isDim,
@@ -1376,8 +1427,11 @@ window.BotOffice = {
   sheet:{get:function(){return sheetSnap;}, set:sheetSet, mode:sheetMode,
     visible:function(){return sheetSnap==="side" ? 0 : sheetVis;},
     peek:function(){return sheetSnap==="side" ? 0 : sheetHeights().peek;}},
+  /* a room chip was pressed (or let go of, null): the link follows it */
+  roomChanged:function(id){ linkRoom = id; writeLink(); },
+  link:function(){ return location.hash || ""; },
   showFallback:showFallback,
-  ready:function(){ ready3d=true; var l=document.getElementById("loading"); if(l) l.hidden=true; }
+  ready:function(){ ready3d=true; var l=document.getElementById("loading"); if(l) l.hidden=true; startLink(); }
 };
 setTimeout(function(){ if(!ready3d) showFallback("The 3D office didn't load. It needs an internet connection to fetch the 3D library (Three.js). Here is the plain office list instead."); }, 15000);
 
