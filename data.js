@@ -13,11 +13,13 @@ window.OFFICE_DATA = {
    "area": "Unit Trust/Eastspring",
    "due": "2026-11-02",
    "deadline": "2 Nov",
-   "stage": "Next",
+   "stage": "Done",
    "project": "EIB",
    "priority": "medium",
    "note": "Todoist capture 6hvWxVC2JvgHhRGF via Steve 3 Nov. Jonima is being proposed EPF i-Invest; no existing board task found, so added new.",
-   "next": "Check EPF eligibility for RM[amt]"
+   "next": "Check EPF eligibility for RM[amt]",
+   "pendingJarvis": 12,
+   "pendingAction": "done"
   },
   {
    "id": "AG-0057",
@@ -636,8 +638,10 @@ window.OFFICE_DATA = {
   }
  ],
  "officeChanges": {
-  "applied": [],
+  "applied": [
+   12
+  ],
   "skipped": [],
-  "at": "2026-11-04 18:54 (UTC+8)"
+  "at": "2026-11-04 19:34 (UTC+8)"
  }
 };
