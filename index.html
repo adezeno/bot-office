@@ -108,7 +108,7 @@ h1{font-family:var(--round);font-size:19px;letter-spacing:-.01em;margin:0;line-h
 /* minimap: the floor plan from above (back wall at the top); tap or drag it to move the view */
 .minimap{position:absolute;left:10px;bottom:10px;z-index:7;width:min(112px,calc(100% - 272px));height:auto;aspect-ratio:7/5;display:block;border:2px solid var(--ink);border-radius:12px;background:var(--paper2);box-shadow:3px 3px 0 rgba(26,22,18,.15);touch-action:none;cursor:pointer;
   transform:translateY(calc(var(--sheet-vis) * -1));transition:transform .32s cubic-bezier(.2,.8,.2,1)}   /* bottom left, riding above the sheet beside the camera buttons; narrower on small phones */
-.minimap[hidden],.stage.nogl .minimap{display:none}
+.minimap[hidden],.minimap.nofit,.stage.nogl .minimap{display:none}
 #app.dragging .minimap{transition:none}
 #app.sheet-full .minimap{visibility:hidden}
 /* camera buttons: one row, bottom right under the thumb, riding just above the sheet (zoom nearest the thumb) */
@@ -1391,15 +1391,27 @@ function linkNote(msg){
   var st = document.getElementById("syncStat"); st.textContent = msg; st.style.color = "";
   clearTimeout(linkNote.t); linkNote.t = setTimeout(function(){ if(st.textContent === msg) st.textContent = ""; }, 7000);
 }
+/* a link shows one thing: a task (with its person's card behind it), else a person, else a room. Arriving on an open
+   page (an edited link, Back) it moves from what is open to that: a task it doesn't name closes, a room clears the card,
+   and the person already open is left as they are (opening them again would start following) */
+function own(o, k){ return Object.prototype.hasOwnProperty.call(o, k); }
 function applyLink(){
-  var q = readLink(), miss = [];
+  var q = readLink(), miss = [], m = document.getElementById("modal"), open = m.classList.contains("on");
+  var t = q.task ? taskFor(q.task) : null, b = q.bot ? botFor(q.bot) : null, r = q.room ? q.room.toLowerCase() : null;
+  if(q.task && !t) miss.push("task "+q.task+" on the board");
+  if(q.bot && !b) miss.push("“"+q.bot+"” in the office");
+  if(r && !own(ROOM_IDS, r)){ miss.push("a room called “"+q.room+"”"); r = null; }
   linkMuted = true;
   try {
-    if(q.room){ var r = q.room.toLowerCase(); if(!ROOM_IDS[r]) miss.push("a room called “"+q.room+"”"); else if(A3() && A3().room) A3().room(r); }
-    if(q.bot){ var b = botFor(q.bot); if(b) select(b); else miss.push("“"+q.bot+"” in the office"); }
-    if(q.task){ var t = taskFor(q.task); if(t){ if(sel !== t.botId) select(t.botId); openModal(t._k); } else miss.push("task "+q.task+" on the board"); }
+    if(t){ if(sel !== t.botId) select(t.botId); if(!open || state.modal !== t._k) openModal(t._k); }
+    else if(b || r){
+      if(open) closeModal();
+      if(b){ if(sel !== b) select(b); }
+      else { deselect(); if(A3() && A3().room) A3().room(r); }
+    }
   } finally { linkMuted = false; }
   if(miss.length) linkNote("Couldn't find "+miss.join(" or ")+".");
+  else if(!(q.task || q.bot || q.room) && String(location.hash || "").replace(/^#/, "")) linkNote("Couldn't read that link. Links look like #bot=miko, #room=founder or #task=AG-0024.");
   writeLink();
 }
 function writeLink(){
@@ -1991,14 +2003,17 @@ function start(){
        framed, that strip is not free for them (laid out, not measured: the buttons may be sliding with the sheet) */
     const bw = camctl.hidden ? 0 : camctl.offsetWidth, strip = bw && r.width - 10 - bw < r.width/2 + 60 ? camctl.offsetHeight + 10 : 0;
     return rects = {view: {x:r.left, y:r.top, w:r.width, h:Math.max(60, r.height - A.sheet.visible()), below:strip},
-                    free: {x:r.left + hud.left, y:r.top + top, w:r.width - hud.left - 8, h:Math.max(60, r.height - below - top)}};
+                    free: {x:r.left + hud.left, y:r.top + top, w:r.width - hud.left - 8, h:Math.max(60, r.height - below - top)},
+                    clamp: {x:r.left + 8, y:r.top + 8, w:r.width - 16, h:Math.max(60, r.height - below - 8)}};
   }
   /* the room chips over the office: a row across its top, or on a short landscape screen a column down its left edge
      (with the minimap under it). Home and the rooms are framed clear of them */
   function hudInsets(){
-    if(roomsEl.hidden || !roomsEl.offsetHeight) return {top:0, left:8};
-    if(roomsEl.offsetHeight > roomsEl.offsetWidth) return {top:0, left:Math.max(roomsEl.offsetLeft + roomsEl.offsetWidth, mapEl.hidden ? 0 : mapEl.offsetLeft + mapEl.offsetWidth) + 8};
-    return {top:roomsEl.offsetTop + roomsEl.offsetHeight + 8, left:8};
+    const cs = roomsEl.hidden ? [] : [...roomsEl.querySelectorAll('.rchip')].filter(c => c.offsetHeight);
+    if(!cs.length) return {top:0, left:8};
+    const right = Math.max(...cs.map(c => roomsEl.offsetLeft + c.offsetLeft + c.offsetWidth)), bottom = Math.max(...cs.map(c => roomsEl.offsetTop + c.offsetTop + c.offsetHeight));
+    if(roomsEl.offsetHeight > roomsEl.offsetWidth) return {top:0, left:Math.max(right, mapEl.offsetWidth ? mapEl.offsetLeft + mapEl.offsetWidth : 0) + 8};
+    return {top:bottom + 8, left:8};
   }
   const roomsEl = document.getElementById('rooms'), mapEl = document.getElementById('minimap');
   let activeRoom = null, roomGoing = false;   // the room chip pressed now; true while a chip itself moves the camera
@@ -2008,7 +2023,7 @@ function start(){
     azMin: -Infinity, azMax: Infinity,   // all the way round: the tall back and left walls drop when the camera passes them
     homeTarget: [0, -.6], homeAzs: [.42, Math.PI/2],
     fitPoints: [[-RX,0,RZ],[RX,0,RZ],[-RX,0,-RZ],[RX,0,-RZ],[-RX,1.9,-RZ],[RX,1.9,-RZ],[-RX,1.9,RZ],[10,2.45,-RZ+.4]],
-    viewRect: () => stageRects().view, freeRect: () => stageRects().free, topInset: 56,
+    viewRect: () => stageRects().view, freeRect: () => stageRects().free, clampRect: () => stageRects().clamp, topInset: 56,
     pick: (x, y) => pickAt(x, y),
     onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.select(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
     onUser: () => { hideHint(); if(!roomGoing) setRoom(null); }, onUnfollow: () => A.followEnded()
@@ -2038,7 +2053,7 @@ function start(){
     return {x:v.x + hud.left, y:v.y + top, w:v.w - hud.left - 8, h:Math.max(40, v.h - top - bot)};
   }
   function goRoom(id, ms){
-    const R = ROOMS[id]; if(!R) return false;
+    const R = Object.prototype.hasOwnProperty.call(ROOMS, id) && ROOMS[id]; if(!R) return false;
     const [x0, z0, x1, z1] = R.box, pts = [];
     [[x0, z0], [x1, z0], [x0, z1], [x1, z1]].forEach(([x, z]) => pts.push([x, 0, z], [x, 1.7, z]));
     roomGoing = true;
@@ -2144,8 +2159,11 @@ function start(){
     lastW = w; lastH = h;
     renderer.setSize(w, h, false);
     camera.aspect = w/h; camera.updateProjectionMatrix();
-    rects = null; lastPeek = A.sheet.peek(); cam.resized();
     roomsEl.classList.toggle('wide', w >= 560);   // full room names where they fit on one row
+    /* a short screen on its side: the chips stack down the left edge; the minimap only shows where it fits under them */
+    const mw = Math.min(112, w - 272), col = roomsEl.offsetHeight > roomsEl.offsetWidth;
+    mapEl.classList.toggle('nofit', col && roomsEl.offsetTop + roomsEl.offsetHeight + 8 > h - 10 - mw*5/7);
+    rects = null; lastPeek = A.sheet.peek(); cam.resized();   // after the chips and minimap settle: home is framed clear of them
     HB.forEach(B => { B.key = ''; });   // re-measure the bubbles lazily
     measureObstacles();
   }
@@ -2292,6 +2310,10 @@ function start(){
   /* taps come from the camera rig (onTap), so a drag never opens anything */
   let hoverId = null, moveQ = null;
   const cvs = renderer.domElement;
+  /* the office answers taps itself (taps are decided by the camera rig). Without a click listener of its own, Chrome's
+     touch adjustment treats the canvas as dead space and hands a touch that lands on it, near a room chip or another
+     control, to that control instead */
+  cvs.addEventListener('click', () => {});
   cvs.addEventListener('pointerdown', () => { tip.hidden = true; });
   cvs.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' && !cam.dragging()) moveQ = {x:e.clientX, y:e.clientY}; });
   cvs.addEventListener('pointerleave', () => { moveQ = null; setHover(null); stage.classList.remove('hot'); tip.hidden = true; });
@@ -2554,7 +2576,7 @@ function createMapCam(o){
   function apply(){
     place();
     if(fitting) return;
-    const r = o.freeRect(), V = floorAt(r.x + r.w/2, r.y + r.h/2); if(!V) return;
+    const r = (o.clampRect || o.freeRect)(), V = floorAt(r.x + r.w/2, r.y + r.h/2); if(!V) return;   // the clamp's own rect: not the HUD-inset one home is fitted in
     const dx = clamp(V[0], room.x0, room.x1) - V[0], dz = clamp(V[1], room.z0, room.z1) - V[1];
     if(dx || dz){ s.tx += dx; s.tz += dz; place(); }
   }
