@@ -1,7 +1,7 @@
 window.OFFICE_DATA = {
  "asOf": "2026-11-02",
- "syncedAt": "2026-11-04T23:54:33.000Z",
- "builtAt": "2026-11-05 07:54 (UTC+8 Asia/Kuching)",
+ "syncedAt": "2026-11-05T00:54:54.000Z",
+ "builtAt": "2026-11-05 08:54 (UTC+8 Asia/Kuching)",
  "sources": {
   "tasks": "Jarvis · Tasks board"
  },
@@ -17,9 +17,7 @@ window.OFFICE_DATA = {
    "project": "EIB",
    "priority": "medium",
    "note": "Todoist capture 6hvWxVC2JvgHhRGF via Steve 3 Nov. Jonima is being proposed EPF i-Invest; no existing board task found, so added new. Marked done by Zeno in the Gana Teguh office 4 Nov.",
-   "next": "Check EPF eligibility for RM[amt]",
-   "pendingJarvis": 12,
-   "pendingAction": "done"
+   "next": "Check EPF eligibility for RM[amt]"
   },
   {
    "id": "AG-0057",
@@ -636,12 +634,5 @@ window.OFFICE_DATA = {
    "next": "Follow up plan choice",
    "taskId": "AG-0024"
   }
- ],
- "officeChanges": {
-  "applied": [
-   12
-  ],
-  "skipped": [],
-  "at": "2026-11-05 07:54 (UTC+8)"
- }
+ ]
 };
