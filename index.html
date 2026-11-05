@@ -3405,6 +3405,8 @@ function createMapCam(o){
 /* ---------- Sims-style owner desk: pie menu -> sit down -> desktop PC with dashboards ---------- */
 (function(){
   var APPS=[["🏢", "Gana Teguh Office", "https://adezeno.github.io/bot-office/", "Live · this office"]];
+  var LOCK='<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 7.5V5.2a3 3 0 0 1 6 0v2.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><rect x="2.8" y="7" width="10.4" height="7.6" rx="1.8" fill="currentColor"/></svg>';
+  var LOCKED_MSG="Private link. Open it where you’re signed in.";   /* what a tap on a locked Page says (the owner key, Stage 9, changes it) */
   var css=document.createElement("style");css.textContent=`
   .pie{position:fixed;z-index:60;width:0;height:0}
   .pie .hub{position:absolute;left:-26px;top:-26px;width:52px;height:52px;border-radius:50%;background:radial-gradient(#7CFC8A,#1f9e3a);box-shadow:0 0 0 4px #fff8,0 6px 18px #0006;display:grid;place-items:center;font-size:24px;animation:pop .18s ease-out}
@@ -3422,10 +3424,23 @@ function createMapCam(o){
   .pc .pcbar b{font-size:18px;flex:1;min-width:0}.pc .pcbar>*{flex-shrink:0}.pc .pcbar b{flex-shrink:1}.pc .scr{overflow-x:hidden}.pc .x{width:auto;flex:0 0 auto}.pc .pcbar small{opacity:.9}
   .pc .x{white-space:nowrap;background:#e5484d;color:#fff;border:0;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer}
   .pc .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
-  .pc .app{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;color:#fff;text-decoration:none;padding:12px 8px;border-radius:14px;background:#ffffff26;border:1px solid #fff5;backdrop-filter:blur(3px);transition:transform .12s}
+  .pc .app{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;color:#fff;text-decoration:none;padding:12px 8px;border-radius:14px;background:#ffffff26;border:1px solid #fff5;backdrop-filter:blur(3px);transition:transform .12s;touch-action:manipulation}
   .pc a.app:hover,.pc a.app:focus{transform:translateY(-3px);background:#ffffff40;outline:2px solid #fff}
-  .pc div.app{border-style:dashed;cursor:default}
-  .pc .app span{font-size:34px;filter:drop-shadow(0 2px 3px #0005)}.pc .app b{font-size:13px}.pc .app i{font-size:11px;opacity:.85;font-style:normal}
+  /* a Page whose link stays private: a padlock, and a tap says why it doesn't open */
+  .pc button.app{width:100%;margin:0;cursor:not-allowed;-webkit-tap-highlight-color:transparent}
+  .pc button.app:active{transform:scale(.97);background:#ffffff1f}
+  .pc button.app:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:14px}
+  @media (hover:hover){.pc button.app:hover{background:#ffffff33}}
+  .pc .lock{position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#0b2340e6;border:1px solid #ffffff59;box-shadow:0 2px 6px #0006}
+  .pc .lock svg{display:block;width:12px;height:12px}
+  .pc .note .lock{position:static;display:inline-grid;width:18px;height:18px;margin-right:6px;vertical-align:middle;box-shadow:none}
+  .pc .note .lock svg{width:10px;height:10px}
+  .pc .lock.rattle{animation:rattle .45s cubic-bezier(.36,.07,.19,.97)}
+  @keyframes rattle{20%{transform:rotate(-16deg)}40%{transform:rotate(12deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(4deg)}}
+  .pc .pctoast{position:absolute;left:50%;bottom:40px;z-index:3;display:flex;align-items:center;gap:8px;width:max-content;max-width:calc(100% - 56px);padding:10px 16px;border-radius:14px;background:#fff;color:#1a1612;font:700 14px/1.3 "Trebuchet MS",sans-serif;box-shadow:0 8px 24px #0006;opacity:0;transform:translate(-50%,8px);pointer-events:none;transition:opacity .16s ease-out,transform .22s cubic-bezier(.2,.8,.2,1)}
+  .pc .pctoast.on{opacity:1;transform:translate(-50%,0)}
+  .pc .pctoast svg{flex:none;width:14px;height:14px;color:#990F3D}
+  .pc .app>span:first-child{font-size:34px;filter:drop-shadow(0 2px 3px #0005)}.pc .app b{font-size:13px}.pc .app i{font-size:11px;opacity:.85;font-style:normal}
   .pc .pghd{margin:16px 0 8px;font-size:16px}
   .pc .note{margin-top:12px;font-size:12px;opacity:.9}
   .sitfx{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:65;background:#fff;color:#1a1612;font:800 16px "Trebuchet MS";padding:10px 18px;border-radius:999px;box-shadow:0 6px 20px #0005;animation:pop .2s}`;
@@ -3443,14 +3458,22 @@ function createMapCam(o){
       var o=document.createElement("div");o.className="pc";o.setAttribute("role","dialog");o.setAttribute("aria-label","Your desk computer: dashboards");
       o.innerHTML='<div class="mon"><div class="scr"><div class="pcbar"><span style="font-size:22px">💻</span><b>Desk PC</b><small>'+new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kuching",hour:"2-digit",minute:"2-digit"})+' (UTC+8)</small><button class="x" type="button">Stand up ✕</button></div><div class="grid">'+
         APPS.map(function(a){return '<a class="app" target="_blank" rel="noopener" href="'+esc(a[2])+'"><span>'+a[0]+'</span><b>'+esc(a[1])+'</b><i>'+esc(a[3])+'</i></a>';}).join("")+
-        '</div><h3 class="pghd">📄 My Pages</h3><div class="note" style="margin:0 0 10px">🔒 Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
+        '</div><h3 class="pghd">📄 My Pages</h3><div class="note" style="margin:0 0 10px"><span class="lock" aria-hidden="true">'+LOCK+'</span>Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
       document.body.appendChild(o); window.zenoPC&&window.zenoPC(true); if(window.BotOffice) window.BotOffice.state.pc=true;   /* the office under it isn't drawn */
       fetch("pages.json?v="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){
         var g=o.querySelector("#pcPages"); if(!g) return;
-        g.innerHTML=(j.pages||[]).map(function(a){ var tile='<span>'+esc(a.icon)+'</span><b>'+esc(a.name)+'</b><i>'+esc(a.group)+'</i>'; return /^https:\/\/cursor\.com\//.test(a.url) ? '<a class="app" target="_blank" rel="noopener" href="'+esc(a.url)+'">'+tile+'</a>' : '<div class="app" title="Link kept private">'+tile+'</div>'; }).join("") || '<div class="note">No Pages found.</div>';
+        g.innerHTML=(j.pages||[]).map(function(a){ var tile='<span aria-hidden="true">'+esc(a.icon)+'</span><b>'+esc(a.name)+'</b><i>'+esc(a.group)+'</i>'; return /^https:\/\/cursor\.com\//.test(a.url) ? '<a class="app" target="_blank" rel="noopener" href="'+esc(a.url)+'">'+tile+'</a>' : '<button type="button" class="app" aria-disabled="true">'+tile+'<span class="lock" aria-hidden="true">'+LOCK+'</span><span class="sr">Private link</span></button>'; }).join("") || '<div class="note">No Pages found.</div>';
       }).catch(function(){ var g=o.querySelector("#pcPages"); if(g) g.innerHTML='<div class="note">Couldn\u2019t load your Pages. Check your connection and sit down again.</div>'; });
-      function shut(){o.remove();removeEventListener("keydown",k);if(window.BotOffice) window.BotOffice.state.pc=false;window.zenoStand&&window.zenoStand();} function k(e){if(e.key==="Escape")shut();}
-      addEventListener("keydown",k); o.querySelector(".x").onclick=shut; o.onclick=function(e){if(e.target===o)shut();};
+      /* a locked Page answers a tap at once: its padlock rattles and the screen says why it doesn't open */
+      var toast=document.createElement("div"), tt=0; toast.className="pctoast"; toast.setAttribute("role","status"); o.querySelector(".mon").appendChild(toast);
+      function locked(t){
+        toast.innerHTML=LOCK+'<span>'+LOCKED_MSG+'</span>'; toast.classList.add("on");
+        clearTimeout(tt); tt=setTimeout(function(){ toast.classList.remove("on"); },3000);
+        var l=t.querySelector(".lock"); l.classList.remove("rattle"); void l.offsetWidth; l.classList.add("rattle");
+      }
+      o.addEventListener("touchstart",function(){},{passive:true});   /* iOS Safari shows :active only where a touch listener is */
+      function shut(){clearTimeout(tt);o.remove();removeEventListener("keydown",k);if(window.BotOffice) window.BotOffice.state.pc=false;window.zenoStand&&window.zenoStand();} function k(e){if(e.key==="Escape")shut();}
+      addEventListener("keydown",k); o.querySelector(".x").onclick=shut; o.onclick=function(e){var t=e.target.closest("button.app"); if(t) locked(t); else if(e.target===o) shut();};
       o.querySelector("a.app").focus();
     },650);
   }
