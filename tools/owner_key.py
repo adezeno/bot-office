@@ -7,25 +7,33 @@ name-free: Jarvis's hourly sync runs it with his private Pages list, which never
   opens it once per device and keeps the key there, so Pages open on Zeno's unlocked devices only.
 - No password (unset, empty, or shorter than 16 characters, since the sealed file stays public for good): the file is
   {"v": 1, "set": false} and the office runs in visitor mode, with the tiles locked and no Unlock form.
-- The salt stays while the password does, so unlocked devices stay unlocked. The file is rewritten only when the
-  links or the password change; a new password locks every device until it is unlocked again.
+- The salt stays while the password does, so unlocked devices stay unlocked, even after rounds run without the
+  password: the last seal is also kept next to the private list (owner.lock.last.json). The file is rewritten only
+  when the links or the password change; a new password locks every device until it is unlocked again.
+- A Page whose link isn't a plain https:// link (an app link, say) keeps a locked tile, and the line names it.
 Command line (Jarvis's sync.sh):
   owner_key.py build PRIVATE_LIST SITE_DIR   writes SITE_DIR/pages.json and SITE_DIR/owner.lock.json and prints one
                                              line, never the password or a link. Exit 1, writing nothing, when the
-                                             list can't be used or the links can't be sealed."""
+                                             list can't be read or the links can't be sealed."""
 import base64, hashlib, json, os, sys, tempfile
 
 PASSWORD_ENV, MIN_PASSWORD = "GT_OWNER_PASSWORD", 16
 KDF, ROUNDS = "PBKDF2-SHA256", 600000
 PLACEHOLDER = {"v": 1, "set": False}
+KEPT = "owner.lock.last.json"   # the last seal, next to the private list: never published
 
 
 class Problem(Exception):
     pass
 
 
+def https(url):
+    return isinstance(url, str) and url.startswith("https://") and len(url) > 8 and not any(c.isspace() for c in url)
+
+
 def entries(path):
-    """the private list as [{id, icon, name, group, url}]: url None when the Page has no link yet"""
+    """the private list as [{id, icon, name, group, url, odd}]: url None when the Page has no link the Desk PC can
+    open (odd: it has one, but not a plain https:// link)"""
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
@@ -40,12 +48,9 @@ def entries(path):
         if not isinstance(name, str) or not name.strip():
             raise Problem("Page %d in the private list has no name" % i)
         url = p.get("url")
-        if url in (None, ""):
-            url = None
-        elif not (isinstance(url, str) and url.startswith("https://") and len(url) > 8 and not any(c.isspace() for c in url)):
-            raise Problem("%s: its link isn't a plain https:// link, so nothing was written" % name)
+        odd = url not in (None, "") and not https(url)
         out.append({"id": "p%02d" % i, "icon": str(p.get("icon") or ""), "name": name, "group": str(p.get("group") or ""),
-                    "url": url})
+                    "url": url if https(url) else None, "odd": odd})
     return out
 
 
@@ -83,7 +88,16 @@ def open_lock(lock, password):
         return None
 
 
-def _write(path, text):
+def _read_lock(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            j = json.load(f)
+        return j if isinstance(j, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _write(path, text, mode=0o644):
     """write only when the bytes change, through a temporary file, so a reader never sees half a file"""
     data = text.encode("utf-8")
     try:
@@ -96,7 +110,7 @@ def _write(path, text):
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        os.chmod(tmp, 0o644)
+        os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         os.unlink(tmp)
@@ -108,35 +122,44 @@ def build(private_list, site, password):
     """write pages.json and owner.lock.json under site; returns the line to print"""
     es = entries(private_list)
     lock_path = os.path.join(site, "owner.lock.json")
+    kept_path = os.path.join(os.path.dirname(os.path.abspath(private_list)), KEPT)
     n, linked = len(es), sum(1 for e in es if e["url"])
+    odd = [e["name"] for e in es if e["odd"]]
+    left = " Left locked (no plain https:// link): %s." % ", ".join(odd) if odd else ""
     if not password or len(password) < MIN_PASSWORD:
         lock = json.dumps(PLACEHOLDER, indent=1)
         why = ("%s isn't set" % PASSWORD_ENV) if not password else (
             "%s is shorter than %d characters, so it wasn't used (the sealed file stays public for good, and a short "
             "password can be guessed offline)" % (PASSWORD_ENV, MIN_PASSWORD))
-        line = "owner key: %s. The office stays in visitor mode: tiles locked, no Unlock form (%d Pages)." % (why, n)
+        line = "owner key: %s. The office stays in visitor mode: tiles locked, no Unlock form (%d Pages).%s" % (why, n, left)
     else:
         try:
             import cryptography.hazmat.primitives.ciphers.aead  # noqa: F401
         except ImportError:
             raise Problem("the Python package cryptography isn't installed here, so the links can't be sealed")
         plain = bundle(es)
-        try:
-            with open(lock_path, encoding="utf-8") as f:
-                old = json.load(f)
-        except (OSError, ValueError):
-            old = None
-        was = open_lock(old, password) if isinstance(old, dict) else None
+        old, kept = _read_lock(lock_path), _read_lock(kept_path)
+        was = open_lock(old, password) if old else None
+        if was is None and kept and open_lock(kept, password) is not None:
+            old, how = kept, "sealed again with the kept salt: unlocked devices stay unlocked"   # after visitor rounds
+        elif was is not None:
+            how = "links changed"
+        else:
+            old, how = None, "new password or first seal: devices unlock again"
         if was == plain:
             lock, how = None, "unchanged"
         else:
-            salt = base64.b64decode(old["salt"]) if was is not None else None
-            lock = json.dumps(seal(plain, password, salt), indent=1)
-            how = "links changed" if was is not None else "new password or first seal: devices unlock again"
-        line = "owner key: %d Pages, %d links sealed in owner.lock.json (%s)." % (n, linked, how)
+            lock = json.dumps(seal(plain, password, base64.b64decode(old["salt"]) if old else None), indent=1)
+        line = "owner key: %d Pages, %d links sealed in owner.lock.json (%s).%s" % (n, linked, how, left)
     _write(os.path.join(site, "pages.json"), pages_json(es))
     if lock is not None:
         _write(lock_path, lock)
+    if password and len(password) >= MIN_PASSWORD:
+        try:
+            with open(lock_path, encoding="utf-8") as f:
+                _write(kept_path, f.read(), 0o600)
+        except OSError as e:
+            line += " (No private copy of the seal was kept: %s.)" % type(e).__name__
     return line
 
 

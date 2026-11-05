@@ -922,7 +922,7 @@ function canChange(t){ return isOwner() && changeable(t); }
    password locks it again. Visitors and locked devices get locked tiles and no change buttons. Hiding the buttons
    protects nothing by itself: the sync only acts on the owner's own GitHub requests (tools/gate.py). */
 var OWNER_LOCK = "owner.lock.json", OWNER_DB = "botoffice.owner", OWNER_FLAG = "botoffice.owner.v1";
-var owner = {state:"checking", pages:null, key:null, notice:"", busy:null, seen:0};
+var owner = {state:"checking", pages:null, key:null, notice:"", busy:null, seen:0, gen:0};   /* gen: bumped by every lock and unlock */
 function isOwner(){ return owner.state==="owner"; }
 function ownerWhy(k){ var e = new Error("owner key: "+k); e.why = k; return e; }
 function ownerBytes(s){ var b = atob(s), a = new Uint8Array(b.length); for(var i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
@@ -973,22 +973,26 @@ function setOwner(st, pages, notice){
   if(was!==st) ownerViews();
   else listeners.forEach(function(fn){fn("owner");});   /* same state, new links or notice: the Desk PC redraws */
 }
-/* what this device is now: the key it kept (here, or in IndexedDB once flagged) against the lock on the site */
+/* what this device is now: the key it kept (here, or in IndexedDB once flagged) against the lock on the site. A lock
+   or an unlock while a check is on its way makes that check's answer stale, and it is dropped */
 function ownerCheck(){
-  var flagged = false; try { flagged = !!localStorage.getItem(OWNER_FLAG); } catch(e){}
+  var gen = owner.gen, flagged = false; try { flagged = !!localStorage.getItem(OWNER_FLAG); } catch(e){}
   var stored = owner.key ? Promise.resolve(owner.key) : !flagged ? Promise.resolve(null) :
     ownerDB("readonly", function(s){ return s.get("owner"); }).then(function(r){ return r && r.key || null; }, function(){ return null; });
   owner.seen = Date.now();
-  return Promise.all([stored, readLock()]).then(function(v){
-    var key = v[0], lock = v[1];
+  return stored.then(function(key){ return readLock().then(function(lock){
+    if(gen!==owner.gen) return;
     if(!lock || !(window.crypto && crypto.subtle)) return setOwner(lock ? "locked" : "none");   /* no owner key on the site: a kept key waits */
     if(!key) return setOwner("locked", null, owner.state==="locked" ? owner.notice : "");
-    return openLock(key, lock).then(function(b){ owner.key = key; setOwner("owner", b.pages, owner.notice==="visit" ? "visit" : ""); }, function(){
+    return openLock(key, lock).then(function(b){ if(gen!==owner.gen) return; owner.key = key; setOwner("owner", b.pages, owner.notice==="visit" ? "visit" : ""); }, function(){
+      if(gen!==owner.gen) return;
       /* this key doesn't open the lock on the site any more: the password changed. Forget it */
       owner.key = null; ownerFlag(false); ownerDB("readwrite", function(s){ return s.delete("owner"); }).catch(function(){});
       setOwner("locked", null, "changed");
     });
-  }, function(){ if(owner.state==="checking") setOwner(flagged || owner.key ? "locked" : "none"); });   /* offline: try again later */
+  }, function(){   /* no connection: keep what was known, but never stay unlocked without a key; checked again once online */
+    if(gen===owner.gen && (owner.state==="checking" || (owner.state==="owner" && !key))) setOwner(key || flagged ? "locked" : "none");
+  }); });
 }
 /* unlock with Zeno's password: the key is derived once (a second call meanwhile shares it), checked against the lock,
    then kept. Rejects with .why: wrong, offline, none (no owner key on the site), nocrypto */
@@ -1001,7 +1005,7 @@ function unlock(pw){
       return openLock(key, lock).catch(function(){ throw ownerWhy("wrong"); }).then(function(b){
         return ownerDB("readwrite", function(s){ return s.put({key:key, at:Date.now()}, "owner"); })
           .then(function(){ return ownerFlag(true); }, function(){ return false; }).then(function(kept){
-            owner.key = key; setOwner("owner", b.pages, kept ? "" : "visit");
+            owner.gen++; owner.key = key; setOwner("owner", b.pages, kept ? "" : "visit");
             return {kept:kept};
           });
       });
@@ -1012,7 +1016,7 @@ function unlock(pw){
 }
 /* Lock this device: the key goes, here and in every tab (they hear the flag go) */
 function lockDevice(){
-  owner.key = null; ownerFlag(false);
+  owner.gen++; owner.key = null; ownerFlag(false);
   return ownerDB("readwrite", function(s){ return s.delete("owner"); }).catch(function(){}).then(function(){ setOwner("locked"); });
 }
 /* a My Pages link for an unlocked device: only an https link sealed under this same id and name (a pages.json and a
@@ -1029,7 +1033,14 @@ function ownerViews(){
   if(state.modal && m.classList.contains("on")){ var f=lastFocus; openModal(state.modal); lastFocus=f; }
   listeners.forEach(function(fn){fn("owner");});
 }
-window.addEventListener("storage", function(e){ if(e.key===OWNER_FLAG){ owner.key = null; ownerCheck(); } });   /* unlocked or locked in another tab */
+/* unlocked or locked in another tab. A lock there locks this tab at once, with or without a connection */
+window.addEventListener("storage", function(e){
+  if(e.key!==OWNER_FLAG) return;
+  owner.gen++; owner.key = null;
+  if(e.newValue===null && owner.state==="owner") setOwner("locked");
+  ownerCheck();
+});
+window.addEventListener("online", function(){ ownerCheck(); });
 document.addEventListener("visibilitychange", function(){ if(!document.hidden && Date.now()-owner.seen > 6e4) ownerCheck(); });
 function reqTitle(r){
   return "["+r.taskId+"] "+(r.action==="done" ? "Mark done" : r.action==="stage" ? "Move to "+r.value : "Change next step");
