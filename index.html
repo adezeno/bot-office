@@ -299,6 +299,56 @@ details.pile[open] summary::before{transform:rotate(90deg)}
 .crow .row b{color:var(--ink)}
 .cmore{margin:0;font-size:12.5px;color:var(--ink2)}
 details.cdone summary{cursor:pointer;padding:6px 0;font-weight:700;color:var(--ink2)}
+/* the action menu, the card's first page: how the bot is doing (counts and the top task; a tap opens that task), then
+   what you can do, the likeliest first and darkest, the rest two to a row so the whole menu shows at half height */
+.bmenu{display:flex;flex-direction:column;gap:10px;padding-top:2px}
+.bmsum{position:relative;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%;min-height:48px;margin:0;padding:6px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);text-align:left;font:inherit}
+button.bmsum{padding-right:30px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button.bmsum::after{content:"›";position:absolute;right:12px;top:50%;transform:translateY(-50%);font:700 22px/1 var(--font);color:var(--ink2)}
+.bmsum .l1{font-size:12.5px;font-weight:600;color:var(--ink2)}
+.bmsum .l2{display:flex;min-width:0;font-size:14px;font-weight:700;line-height:1.3;white-space:nowrap}
+.bmsum .l2 .tt{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long title gives way; how late it is stays whole */
+.bmsum .l2 .dd{flex:none}
+.bmsum .l2 .dd.late{color:var(--crimson)}
+.bmitems{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bmi{display:flex;align-items:center;gap:8px;min-width:0;min-height:50px;margin:0;padding:6px 12px;border:2px solid var(--ink);border-radius:14px;background:#fff;color:var(--ink);font:700 14.5px/1.2 var(--font);text-align:left;cursor:pointer;box-shadow:3px 3px 0 rgba(26,22,18,.15);touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:transform .1s,box-shadow .1s}
+.bmi.primary,.bmi.primary+.bmi:last-child{grid-column:1/-1}   /* the first takes the row; so does a lone second */
+.bmi.primary{background:var(--ink);color:#fff;font-size:15.5px}
+.bmi .ic{flex:none;font-size:19px;line-height:1}
+.bmi .lb{flex:1;min-width:0}
+.bmi .ct{flex:none;min-width:24px;padding:1px 7px;border-radius:999px;background:var(--paper3);color:var(--ink);font-size:12px;font-weight:800;text-align:center}
+.bmi.primary .ct{background:rgba(255,255,255,.22);color:#fff}
+@media (hover:hover){.bmi:hover{background:var(--paper)}.bmi.primary:hover{background:#2e2721}button.bmsum:hover{border-color:var(--ink)}}
+.bmi:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(26,22,18,.15)}
+.bback{align-self:flex-start;display:inline-flex;align-items:center;gap:2px;min-height:44px;margin:-6px 0 -4px -8px;padding:0 12px 0 8px;border:0;border-radius:10px;background:none;color:var(--steel);font:700 14px var(--font);cursor:pointer;touch-action:manipulation}
+.bback span{font-size:20px;line-height:1}
+/* the Do page: a task and today's actions on it */
+.drow{margin:0 0 8px;padding:2px 10px 10px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+.drow.over{border-left:5px solid var(--crimson)}
+.drow .crow{margin:0;padding:8px 0 4px;border:0;border-radius:8px;background:none}
+.drow .crow.over{border-left:0}
+/* the answer to "What are you on?" in the plain list, where there is no office to say it in */
+.bmsay{position:relative;margin:2px 0 4px;padding:9px 12px;border:2px solid var(--ink);border-radius:14px;background:#fff;font-size:14px;font-weight:700;line-height:1.35}
+.bmsay::before{content:"";position:absolute;bottom:100%;left:22px;border:7px solid transparent;border-bottom:8px solid var(--ink);border-top:0}
+/* the answer in the office: over the bot's head bubble, above the office's buttons; it never takes a tap */
+.say{--tx:0px;position:absolute;left:0;top:0;z-index:8;box-sizing:border-box;width:max-content;padding:7px 11px;border:2px solid var(--ink);border-radius:14px;background:#fff;color:var(--ink);font:700 13px/1.3 var(--font);text-align:center;text-wrap:balance;pointer-events:none;box-shadow:3px 3px 0 rgba(26,22,18,.15);visibility:hidden;will-change:transform}
+.say::after{content:"";position:absolute;top:100%;left:50%;margin-left:calc(var(--tx) - 6px);border:6px solid transparent;border-top:7px solid var(--ink);border-bottom:0}
+.say[hidden]{display:none}
+/* the pie: the bot's menu round its face on wide screens, in the desk menu's Sims look, how it is doing over its head */
+.botpie{position:fixed;left:0;top:0;z-index:50;width:0;height:0}
+.bphub{position:absolute;left:-30px;top:-30px;width:60px;height:60px;box-sizing:border-box;border-radius:50%;border:3px solid #b9ab9a;background:var(--wall,#fff);display:grid;place-items:center;box-shadow:0 0 0 4px #fff8,0 6px 18px #0006;animation:bppop .18s ease-out}
+.bphub svg{width:52px;height:52px;border-radius:50%}
+.bphub.need{border-color:var(--crimson)}.bphub.work{border-color:var(--green)}.bphub.wait{border-color:var(--steel)}.bphub.idle{border-style:dashed}
+.bphead{position:absolute;left:0;top:-42px;transform:translate(-50%,-100%);box-sizing:border-box;width:max-content;max-width:300px;padding:8px 14px;border-radius:14px;background:#fff;color:var(--ink);box-shadow:0 6px 18px #0005;font:600 12.5px/1.35 "Trebuchet MS",sans-serif;text-align:center;animation:bppop .2s ease-out}
+.bphead b{display:block;font-size:15px}
+.bphead .l1,.bphead .l2{display:block}
+.bphead .l2{display:flex;justify-content:center;min-width:0;font-weight:700;white-space:nowrap}
+.bphead .l2 .tt{min-width:0;overflow:hidden;text-overflow:ellipsis}.bphead .l2 .dd{flex:none}
+.bpi{position:absolute;display:inline-flex;align-items:center;gap:6px;min-height:48px;margin:0;padding:0 18px;white-space:nowrap;background:linear-gradient(#5fb4ff,#1f6fd1);color:#fff;font:700 15px "Trebuchet MS",sans-serif;border:2px solid #fff;border-radius:999px;box-shadow:0 4px 12px #0005;cursor:pointer;animation:bppop .2s ease-out}
+.bpi.r{transform:translate(0,-50%)}.bpi.l{transform:translate(-100%,-50%)}.bpi.b{transform:translate(-50%,-50%)}
+.bpi:hover,.bpi:focus-visible{background:linear-gradient(#8fd0ff,#2f86ef);outline:3px solid #ffd166;outline-offset:2px}
+.bpi .ct{min-width:22px;padding:0 6px;border-radius:999px;background:#ffffff38;font-size:12px;text-align:center}
+@keyframes bppop{from{opacity:0;scale:.6}to{opacity:1;scale:1}}
 /* follow pill over the office, and the selected person's name chip */
 .followpill{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:7;display:inline-flex;align-items:center;gap:8px;min-height:40px;max-width:calc(100% - 24px);padding:0 5px 0 14px;border:2px solid var(--gold);border-radius:999px;background:var(--ink);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:3px 3px 0 rgba(26,22,18,.2);white-space:nowrap}
 .followpill[hidden]{display:none}
@@ -445,7 +495,7 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
   <section class="dock" id="sheet" aria-labelledby="needsTitle">
     <div class="sheethead" id="sheetHead">
       <div class="grab" aria-hidden="true"></div>
-      <div class="pbar" id="pbar" role="group" aria-label="Zeno and the team. Tap to go there, tap again to follow, press and hold for all tasks."></div>
+      <div class="pbar" id="pbar" role="group" aria-label="Zeno and the team. Tap to go there and open the menu, tap again to follow, press and hold for all tasks."></div>
       <button type="button" class="sheetsum" id="sheetSum" aria-expanded="false" aria-controls="sheetBody">
         <span class="bigbadge" id="needCount" aria-hidden="true">0</span>
         <span class="sumtext"><b id="needsTitle">Needs you</b><small id="needsSub"></small></span>
@@ -763,7 +813,7 @@ function renderOrg(){
   }
   var specs = BOTS.filter(function(b){return b.id!=="steve";}).map(node).join("");
   document.getElementById("view-org").innerHTML =
-    '<p class="orgnote">You set the direction. Steve takes in every request and passes it to the right specialist. Tap anyone to see their tasks.</p>'+
+    '<p class="orgnote">You set the direction. Steve takes in every request and passes it to the right specialist. Tap anyone to open their menu.</p>'+
     '<div class="org">'+
     '<div class="onode owner"><svg viewBox="0 0 46 46" style="background:#990F3D;border-color:#fff"><text x="23" y="31" font-size="22" text-anchor="middle">👑</text></svg><span><b>Zeno</b><small>Owner · makes the final call</small><span class="cnt" style="color:#ffd7e2">'+NEEDS.length+' things need you</span></span></div>'+
     '<div class="vline"></div>'+ node(BY.steve) + '<div class="vline"></div>'+
@@ -1028,6 +1078,7 @@ function ownerLink(id, name){
 }
 /* the owner state changed: whatever shows change buttons is drawn again */
 function ownerViews(){
+  if(pie) closePie(pie.el && pie.el.contains(document.activeElement));   /* its items depend on the owner state */
   if(sel) renderCard();
   var m = document.getElementById("modal");
   if(state.modal && m.classList.contains("on")){ var f=lastFocus; openModal(state.modal); lastFocus=f; }
@@ -1175,6 +1226,10 @@ function revealPortrait(id){
    Half height on open, so the person stays in view above it; full for the whole task list. Rows open the task modal,
    which holds the change requests. Swipe sideways for the next person. */
 var sel = null, following = false, cardReturn = null, actTimer = 0;
+/* a bot's card has pages: "menu" (opened first), "all" (the card as it was: every task) and "do" (owner devices: the
+   open tasks with today's actions). pageFrom: the menu item a page was opened from, for Back. trigger: where focus
+   was when the card opened, and goes back to when it closes (a portrait, a card in the plain list, the office) */
+var page = "menu", pageFrom = null, trigger = null;
 var cardHead=document.getElementById("cardHead"), cardSum=document.getElementById("cardSum"), cardTitle=document.getElementById("cardTitle"),
     cardAct=document.getElementById("cardAct"), cardFace=document.getElementById("cardFace"), cardFollow=document.getElementById("cardFollow"),
     botCard=document.getElementById("botCard"), followPill=document.getElementById("followPill"), selLive=document.getElementById("selLive");
@@ -1235,14 +1290,226 @@ function botCardHTML(id){
   h += '<div class="srcnote">Source: '+(id==="steve"?SRC_ARENA:SRC_TASKS)+' · data as of '+esc(asOf)+'. '+(id==="steve"?'Read-only.':isOwner()?'Tap a task to see it or to ask Jarvis to change it.':'Tap a task to see it.')+'</div>';
   return h;
 }
+/* ---------- the action menu: what you can do with a bot ----------
+   A tap on a bot (its body, desk or head bubble), its portrait, its org-chart node or its card in the plain list opens
+   its card at the menu: how it is doing (the counts and the top task, so checking a bot stays one tap), then at most
+   five actions, the likeliest first. "See all tasks" is the card as it was; "Do one of …'s tasks" lists the open tasks
+   with today's actions, on owner devices only. Ask … to waits for the private inbox (Stage 12), Your reply for
+   Stage 14: both go before Do. On wide screens a tap in the office shows the same menu as a pie round the bot */
+var STAGE_RANK = {"Doing":0, "Next":1, "Needs Zeno":2, "Waiting On":3, "Inbox":4};
+function rankOf(t){ var r = STAGE_RANK[t.stage]; return r===undefined ? 5 : r; }
+/* this bot's open tasks: doing first, then up next, waiting for you, waiting on others, the inbox; late ones first */
+function openByStage(id){
+  return tasksOf(id).filter(isOpen).sort(function(a, b){
+    return rankOf(a)-rankOf(b) || (a._over?0:1)-(b._over?0:1) || ((a.due||"9999")<(b.due||"9999") ? -1 : (a.due||"9999")>(b.due||"9999") ? 1 : 0);
+  });
+}
+/* the task the header names: the first of theirs in the Needs-you order, else their first open one */
+function topTask(id){ for(var i=0;i<NEEDS.length;i++) if(NEEDS[i].botId===id) return NEEDS[i]; return openByStage(id)[0] || null; }
+/* how a task stands against its date, in a few words */
+function soonText(t){
+  if(!t.due) return "";
+  var n = dayDiff(t.due, today);
+  return n>0 ? n+(n===1 ? " day" : " days")+" late" : n===0 ? "due today" : "due in "+(-n)+(n===-1 ? " day" : " days");
+}
+function countsLine(id){
+  var c = counts(id), late = tasksOf(id).filter(function(t){ return t._over; }).length;
+  if(!c.open) return "No open tasks on Jarvis's board";
+  return [c.open+" open"].concat(late ? [late+" late"] : [], c.need ? [c.need+(c.need===1 ? " needs you" : " need you")] : []).join(" · ");
+}
+function canDo(id){ return id!=="zeno" && tasksOf(id).some(canChange); }
+function menuItems(id){
+  var b = BY[id], all = tasksOf(id), list = [];
+  if(canDo(id)){ var n = all.filter(canChange).length; list.push({key:"do", icon:"✅", label:"Do one of "+b.name+"'s tasks", count:n, sr:n+(n===1 ? " task" : " tasks")+" you can change"}); }
+  list.push({key:"what", icon:"💬", label:"What are you on?"});
+  list.push({key:"all", icon:"📋", label:"See all tasks", count:all.length, sr:all.length+(all.length===1 ? " task" : " tasks")});
+  return list.slice(0, 5);
+}
+function menuHTML(id){
+  var b = BY[id], top = topTask(id), d = top ? soonText(top) : "", l1 = '<span class="l1">'+esc(countsLine(id))+'</span>';
+  var sum = top ? '<button type="button" class="bmsum" data-task="'+top._k+'">'+l1+'<span class="l2"><span class="tt">Top: '+T(top.title)+'</span>'+(d ? '<span class="dd'+(top._over ? ' late' : '')+'">&nbsp;· '+esc(d)+'</span>' : '')+'</span></button>'
+    : '<p class="bmsum">'+l1+'</p>';
+  return '<div id="botMenu" class="bmenu" role="group" aria-label="What to do with '+esc(b.name)+'">'+sum+
+    (said && said.id===id ? '<p class="bmsay"><span aria-hidden="true">💬</span> '+esc(said.text)+'</p>' : '')+'<div class="bmitems">'+
+    menuItems(id).map(function(it, i){
+      return '<button type="button" class="bmi'+(i ? '' : ' primary')+'" data-bmi="'+it.key+'"'+(it.sr ? ' aria-label="'+esc(it.label+", "+it.sr)+'"' : '')+'>'+
+        '<span class="ic" aria-hidden="true">'+it.icon+'</span><span class="lb">'+esc(it.label)+'</span>'+(it.count!=null ? '<span class="ct" aria-hidden="true">'+it.count+'</span>' : '')+'</button>';
+    }).join("")+'</div></div>';
+}
+function backHTML(id){ return '<button type="button" class="bback" data-bback aria-label="Back to '+esc(BY[id].name)+"'s menu"+'"><span aria-hidden="true">‹</span> Back</button>'; }
+/* "Do one of …'s tasks" (owner devices): their open tasks you can change, the ones that need you first, each with
+   today's actions: mark it done, move it, change its next step (Stage 12 turns these into one verb per stage) */
+function doTasks(id){
+  var mine = NEEDS.filter(function(t){ return t.botId===id; });
+  return mine.concat(openByStage(id).filter(function(t){ return mine.indexOf(t)<0; })).filter(canChange);
+}
+function doHTML(id){
+  var b = BY[id], list = doTasks(id);
+  return backHTML(id)+'<div><h3>Do one of '+esc(b.name)+"'s tasks"+' <span class="n">'+list.length+'</span></h3>'+
+    '<p class="cnone">Each change goes to Jarvis as a public GitHub request (you confirm first). Jarvis\'s board stays the source of truth.</p></div>'+
+    '<div>'+list.map(function(t){ return '<div class="drow'+(t._over ? ' over' : '')+'">'+rowHTML(t)+pendHTML(t)+actsHTML(t)+'</div>'; }).join("")+'</div>';
+}
+/* a next step being typed on the Do page survives a redraw */
+function openForms(){
+  return [].map.call(botCard.querySelectorAll(".nextform:not([hidden])"), function(f){
+    var i = f.querySelector("input"); return {id:f.dataset.id, v:i.value, on:document.activeElement===i, s:i.selectionStart, e:i.selectionEnd};
+  });
+}
+function reopenForms(list){
+  list.forEach(function(k){
+    var f = botCard.querySelector('.nextform[data-id="'+k.id.replace(/["\\]/g,"")+'"]'); if(!f) return;
+    var i = f.querySelector("input"), t = f.parentNode.querySelector('[data-act="nexttoggle"]');
+    f.hidden = false; if(t) t.setAttribute("aria-expanded","true"); i.value = k.v;
+    if(k.on){ i.focus({preventScroll:true}); try { i.setSelectionRange(k.s, k.e); } catch(e){} }
+  });
+}
+/* a control in the card, found again after a redraw (the board updated, a request was sent) */
+function focusKey(el){
+  var a = ["data-bmi","data-bback","data-task","data-act","data-copy","data-withdraw","data-sendlink","data-alltasks","data-seeall","data-sitpc"];
+  for(var i=0;i<a.length;i++) if(el.hasAttribute(a[i])){
+    var v = el.getAttribute(a[i]), s = '['+a[i]+(v ? '="'+v.replace(/["\\]/g,"")+'"' : '')+']';
+    return el.dataset.id ? s+'[data-id="'+el.dataset.id.replace(/["\\]/g,"")+'"]' : s;
+  }
+  var f = el.closest(".nextform[data-id]");   /* the next-step form's Send: its toggle */
+  return f ? '[data-act="nexttoggle"][data-id="'+f.dataset.id.replace(/["\\]/g,"")+'"]' : null;
+}
+/* the first control of the page now showing: the first action, or Back */
+function focusFirst(){
+  var f = botCard.querySelector(page==="menu" ? "[data-bmi]" : "[data-bback]");
+  if(f) f.focus({preventScroll:true});
+}
 function renderCard(){
   if(!sel) return;
-  var b = who(sel);
+  var b = who(sel), f = document.activeElement, key = f && botCard.contains(f) ? focusKey(f) : null;
   cardFace.className = "cface "+personState(sel); cardFace.style.setProperty("--wall", b.wall); cardFace.innerHTML = portrait(b);
   cardTitle.textContent = sel==="zeno" ? "Zeno · Founder" : label(b);
   cardAct.textContent = activityOf(sel);
   cardFollow.hidden = !A3();
-  botCard.innerHTML = sel==="zeno" ? zenoCardHTML() : botCardHTML(sel);
+  if(page==="do" && !canDo(sel)) page = "menu";   /* no longer an owner device, or nothing left to change: the menu */
+  var forms = page==="do" && botCard.dataset.page==="do" ? openForms() : [];
+  botCard.dataset.page = sel==="zeno" ? "zeno" : page;
+  botCard.innerHTML = sel==="zeno" ? zenoCardHTML() : page==="all" ? backHTML(sel)+botCardHTML(sel) : page==="do" ? doHTML(sel) : menuHTML(sel);
+  reopenForms(forms);
+  if(key && !forms.some(function(k){ return k.on; })){ var n = botCard.querySelector(key); if(n) n.focus({preventScroll:true}); else focusFirst(); }
+}
+/* "What are you on?": the bot answers from the board and nothing else (the jobs it is on come with jobs.json in
+   Stage 13): its first open task, doing first, how it stands against its date, and how many more there are */
+var SAY_WORDS = {"Doing":"On it: ", "Next":"Up next: ", "Needs Zeno":"Waiting for you: ", "Waiting On":"Waiting on others: ", "Inbox":"In my inbox: "};
+function whatOn(id){
+  var list = openByStage(id), t = list[0];
+  if(!t) return "Nothing open on my list right now 💤";
+  var title = redact(t.title), d = soonText(t);
+  if(title.length > 64) title = title.slice(0, 63).replace(/\s+$/, "")+"…";
+  return (SAY_WORDS[t.stage] || "On my list: ")+title+(d ? " · "+d : "")+(list.length > 1 ? " (+"+(list.length-1)+" more)" : "");
+}
+/* said over the bot in the office; without one (the plain list) in the menu itself. Read out either way */
+var said = null;
+function sayWhatOn(id){
+  var text = whatOn(id), inOffice = !!(A3() && A3().say && A3().say(id, text));
+  said = inOffice ? null : {id:id, text:text};
+  if(!inOffice && sel===id && page==="menu") renderCard();
+  selLive.textContent = "";
+  setTimeout(function(){ selLive.textContent = BY[id].name+": "+text; }, 30);   /* asked again: read out again */
+}
+/* a menu action (from the card or the pie): a page of the card, or the bot says what it is on */
+function menuAct(id, key){
+  if(key==="what"){ sayWhatOn(id); return; }
+  pageFrom = key;
+  if(sel!==id){ select(id, {page:key}); return; }
+  page = key; renderCard(); sheetSet("full"); sheetBody.scrollTop = 0; focusFirst(); writeLink();
+}
+function backToMenu(){
+  page = "menu"; renderCard(); sheetSet("half"); sheetBody.scrollTop = 0;
+  var b = botCard.querySelector('[data-bmi="'+(pageFrom||"")+'"]') || botCard.querySelector("[data-bmi]");
+  if(b) b.focus({preventScroll:true});
+}
+/* where focus was when a card opened: that element, and how to find it again once it has been redrawn */
+function remember(a){
+  if(!a || a===document.body || !a.closest) return null;
+  var box = a.parentNode && a.parentNode.closest ? a.parentNode.closest("[id]") : null, s = null;
+  ["pick","bot","task","zeno"].some(function(k){ if(a.dataset && a.dataset[k]!=null){ s = (box ? "#"+box.id+" " : "")+"[data-"+k+'="'+String(a.dataset[k]).replace(/["\\]/g,"")+'"]'; return true; } });
+  return {el:a, sel:a.id ? "#"+a.id : s};
+}
+function shown(el){ return !!el && el.isConnected && el.getClientRects().length>0 && !el.closest("[inert],[hidden]"); }
+/* ---------- the pie: the same menu round the bot, on wide screens, after a tap on it in the office ----------
+   The Sims way: the bot is framed, then its actions sit round its face, with how it is doing over its head. The side
+   panel stays as it was until an action opens the card there. Esc, Tab, the wheel or a tap anywhere else closes it,
+   and focus goes back where it was. It keeps the desk menu's look */
+var pie = null, pieShut = 0;   /* pie: {id, trigger, t0, raf, el}; pieShut: when a tap outside last closed one */
+var PIE_AT = {1:[["r",0]], 2:[["r",0],["l",0]], 3:[["r",0],["l",0],["b",80]], 4:[["r",0],["l",0],["r",58],["l",58]],
+  5:[["r",0],["l",0],["r",58],["l",58],["b",136]]};   /* where each item goes (side, rows down), by how many there are */
+function pieMode(){
+  var st = document.getElementById("stage");
+  return !!A3() && !st.classList.contains("nogl") && sheetMode()==="side" && st.clientWidth>=560 && st.clientHeight>=420;
+}
+function openPie(id){
+  closePie(false);
+  var p = pie = {id:id, trigger:remember(document.activeElement), t0:performance.now()};
+  A3().mark(id); A3().focus(id);
+  addEventListener("pointerdown", pieOutside, true); addEventListener("wheel", pieWheel, {capture:true, passive:true});
+  (function wait(){   /* once the camera has framed them (at most 1.5 s) */
+    if(pie!==p) return;
+    if(window.officeCam && officeCam.busy() && performance.now()-p.t0 < 1500){ p.raf = requestAnimationFrame(wait); return; }
+    drawPie(p);
+  })();
+}
+function drawPie(p){
+  var id = p.id, b = BY[id], at = A3().anchor(id), st = document.getElementById("stage").getBoundingClientRect();
+  if(!at){ closePie(true); return; }
+  var items = menuItems(id), top = topTask(id), d = top ? soonText(top) : "", el = document.createElement("div");
+  el.className = "botpie"; el.dataset.person = id;
+  el.setAttribute("role", "dialog"); el.setAttribute("aria-labelledby", "pieTitle"); el.setAttribute("aria-describedby", "pieSum");
+  el.innerHTML = '<div class="bphead"><b id="pieTitle">'+esc(label(b))+'</b><span id="pieSum"><span class="l1">'+esc(countsLine(id))+'</span>'+
+      (top ? '<span class="l2"><span class="tt">Top: '+T(top.title)+'</span>'+(d ? '<span class="dd">&nbsp;· '+esc(d)+'</span>' : '')+'</span>' : '')+'</span></div>'+
+    '<span class="bphub '+personState(id)+'" style="--wall:'+b.wall+'" aria-hidden="true">'+portrait(b)+'</span>'+
+    items.map(function(it, i){ var at = PIE_AT[items.length][i];
+      return '<button type="button" class="bpi '+at[0]+'" data-bmi="'+it.key+'" style="left:'+(at[0]==="r" ? 42 : at[0]==="l" ? -42 : 0)+'px;top:'+at[1]+'px"'+
+        (it.sr ? ' aria-label="'+esc(it.label+", "+it.sr)+'"' : '')+'><span aria-hidden="true">'+it.icon+'</span> '+esc(it.label)+
+        (it.count!=null ? ' <span class="ct" aria-hidden="true">'+it.count+'</span>' : '')+'</button>';
+    }).join("");
+  document.body.appendChild(el); p.el = el;
+  /* the middle on their face, the whole pie kept inside the office: moved as a whole where it would stick out */
+  var x = at[0], y = at[1];
+  el.style.left = x+"px"; el.style.top = y+"px";
+  var r = [].map.call(el.children, function(c){ return c.getBoundingClientRect(); });
+  var x0 = Math.min.apply(null, r.map(function(q){ return q.left; })), x1 = Math.max.apply(null, r.map(function(q){ return q.right; })),
+      y0 = Math.min.apply(null, r.map(function(q){ return q.top; })), y1 = Math.max.apply(null, r.map(function(q){ return q.bottom; }));
+  var dx = x0 < st.left+8 ? st.left+8-x0 : x1 > st.right-8 ? st.right-8-x1 : 0, dy = y0 < st.top+8 ? st.top+8-y0 : y1 > st.bottom-8 ? st.bottom-8-y1 : 0;
+  el.style.left = (x+dx)+"px"; el.style.top = (y+dy)+"px";
+  el.addEventListener("keydown", pieKey);
+  el.addEventListener("click", function(e){ var t = e.target.closest("[data-bmi]"); if(!t) return; e.stopPropagation(); closePie(true); menuAct(id, t.dataset.bmi); });
+  var f = el.querySelector("[data-bmi]"); if(f) f.focus({preventScroll:true});
+}
+/* arrows go round the items; Esc and Tab close it, focus back where it was */
+function pieKey(e){
+  var bs = [].slice.call(pie && pie.el ? pie.el.querySelectorAll("[data-bmi]") : []), i = bs.indexOf(document.activeElement);
+  if(e.key==="Escape" || e.key==="Tab"){ e.preventDefault(); e.stopPropagation(); closePie(true); return; }
+  var k = {ArrowRight:1, ArrowDown:1, ArrowLeft:-1, ArrowUp:-1}[e.key];
+  if(k){ e.preventDefault(); bs[(i+k+bs.length)%bs.length].focus({preventScroll:true}); }
+  else if(e.key==="Home" || e.key==="End"){ e.preventDefault(); bs[e.key==="Home" ? 0 : bs.length-1].focus({preventScroll:true}); }
+}
+function pieOutside(e){ if(pie && !(pie.el && pie.el.contains(e.target))){ pieShut = performance.now(); closePie(false); } }
+function pieWheel(){ closePie(false); }
+/* restore: focus goes back where it was when the pie opened (it always does if focus was in the pie) */
+function closePie(restore){
+  if(!pie) return;
+  var p = pie; pie = null;
+  cancelAnimationFrame(p.raf);
+  removeEventListener("pointerdown", pieOutside, true); removeEventListener("wheel", pieWheel, {capture:true, passive:true});
+  var had = !!(p.el && p.el.contains(document.activeElement));
+  if(p.el) p.el.remove();
+  if(A3()) A3().mark(sel);   /* the ring goes back to whoever's card is open, if anyone's */
+  if(restore || had){
+    var t = p.trigger, el = t && (shown(t.el) ? t.el : t.sel ? document.querySelector(t.sel) : null);
+    (shown(el) ? el : document.getElementById("stage")).focus({preventScroll:true});
+  }
+}
+/* focus goes back where it was when the card opened (or to the person's portrait) */
+function focusBack(was){
+  var t = trigger, el = t && (shown(t.el) ? t.el : t.sel ? document.querySelector(t.sel) : null);
+  trigger = null;
+  if(!shown(el)) el = pbar.querySelector('[data-pick="'+was+'"]') || sheetSum;
+  el.focus({preventScroll:true});
 }
 /* the sheet shows either the Needs-you lists or the card */
 function cardMode(on){
@@ -1256,24 +1523,31 @@ function cardMode(on){
 }
 /* select a person: fly there (about 600 ms) and open their card at half height. The same person again: follow.
    opts.list: open the whole task list (long-press, "+N" notes, "See all tasks"); opts.keep: keep the sheet's height (swipe) */
+/* opts.page: open that page of a bot's card (else the menu; a swipe or the same person again keeps the page). Focus
+   moves to the page's first control, and goes back where it was once the card closes */
 function select(id, opts){
   opts = opts || {};
   if(id!=="zeno" && !BY[id]) return;
-  var again = sel===id, wasOpen = !!sel, inSheet = document.activeElement && document.activeElement.closest && document.activeElement.closest("#sheetBody, #modal");
+  closePie(false);
+  var again = sel===id, wasOpen = !!sel, a = document.activeElement, inSheet = a && a.closest && a.closest("#sheetBody, #modal");
   if(!wasOpen) cardReturn = {snap:sheetSnap, tab:state.tab};
+  if(!(a && a.closest && a.closest("#cardHead, #botCard, #modal"))) trigger = remember(a);
   if(!again && following){ following = false; if(A3()) A3().follow(null); }   /* follow belongs to one person */
-  sel = id;
+  sel = id; if(!again) said = null;
+  page = opts.page || (opts.list ? "all" : opts.keep || again ? page : "menu");
+  if(page==="do" && !canDo(id)) page = "menu";
   markBar(); renderCard(); cardMode(true); revealPortrait(id);
-  var snap = opts.list ? "full" : opts.keep ? sheetSnap : (again && sheetSnap!=="full") ? sheetSnap : "half";
+  var snap = opts.list || opts.page ? "full" : opts.keep ? sheetSnap : (again && sheetSnap!=="full") ? sheetSnap : "half";
   sheetSet(snap);
-  if(again && !opts.list && !opts.keep) setFollow(true);
+  if(again && !opts.list && !opts.keep && !opts.page) setFollow(true);
   else if(A3()) A3().focus(id);   /* while the full sheet covers the office, the scene frames them once it comes back down */
   if(A3()) A3().mark(id);
   syncFollow();
   if(opts.list) requestAnimationFrame(showAll);
   else sheetBody.scrollTop = 0;
-  if(inSheet) cardSum.focus();
-  selLive.textContent = cardTitle.textContent+". "+cardAct.textContent;
+  if(id!=="zeno" && !linkMuted && !opts.keep && !(again && !opts.page && !opts.list)) focusFirst();
+  else if(inSheet) cardSum.focus();
+  selLive.textContent = cardTitle.textContent+". "+cardAct.textContent+(id==="zeno" ? "" : ". "+countsLine(id)+".");
   writeLink();
 }
 /* the whole task list at the top of the sheet. Only the sheet's own list scrolls: scrollIntoView also scrolled the
@@ -1281,15 +1555,16 @@ function select(id, opts){
 function showAll(){ var l = document.getElementById("cardAll"); if(l) sheetBody.scrollTop += l.getBoundingClientRect().top - sheetBody.getBoundingClientRect().top; }
 function deselect(){
   if(!sel) return;
-  var was = sel, back = cardReturn || {snap:"peek", tab:state.tab}, inCard = document.activeElement && document.activeElement.closest && document.activeElement.closest("#cardHead, #botCard");
-  sel = null; cardReturn = null;
+  var was = sel, back = cardReturn || {snap:"peek", tab:state.tab}, a = document.activeElement,
+      inCard = a && a.closest && a.closest("#cardHead, #botCard"), lost = !a || a===document.body;
+  sel = null; cardReturn = null; page = "menu"; said = null;
   if(following){ following = false; if(A3()) A3().follow(null); }
   state.tab = back.tab;
   cardMode(false); markBar(); syncFollow();
   document.querySelectorAll(".tab").forEach(function(b){b.setAttribute("aria-selected", String(b.dataset.tab===state.tab));});
   if(A3()) A3().mark(null);
   sheetSet(back.snap);
-  if(inCard){ var p = pbar.querySelector('[data-pick="'+was+'"]'); (p || sheetSum).focus(); }
+  if(inCard || lost) focusBack(was); else trigger = null;
   selLive.textContent = "";
   writeLink();
 }
@@ -1366,6 +1641,7 @@ function setTab(tab){
   listeners.forEach(function(fn){fn("tab");});
 }
 function renderAll(){
+  if(pie) closePie(pie.el && pie.el.contains(document.activeElement));
   renderChips(); renderFloor(); renderOrg(); renderOwn(); renderBar();
   listeners.forEach(function(fn){fn("data");});
   if(sel) renderCard();
@@ -1518,6 +1794,7 @@ sheetBody.addEventListener("pointerup", function(e){
 });
 sheetBody.addEventListener("pointercancel", function(){ sw=null; });
 /* turning the phone moves the sheet between the bottom and the side; an open card stays open and re-frames its person */
+window.addEventListener("resize", function(){ if(pie) closePie(true); });
 SIDE_MQ.addEventListener("change", function(){
   endHead(); if(window.officeCam && window.officeCam.cancel) window.officeCam.cancel();
   sheetSet(sel ? "half" : "peek");
@@ -1546,6 +1823,8 @@ document.addEventListener("click", function(e){
   if(e.target.closest("#cardClose")){ deselect(); return; }
   if(e.target.closest("#cardFollow")){ setFollow(!following); return; }
   if(e.target.closest("#followPill")){ setFollow(false); return; }
+  if((el = e.target.closest("#botMenu [data-bmi]"))){ if(sel) menuAct(sel, el.dataset.bmi); return; }
+  if(e.target.closest("#botCard [data-bback]")){ backToMenu(); return; }
   if(e.target.closest("[data-alltasks]")){ sheetSet("full"); requestAnimationFrame(showAll); return; }
   if(e.target.closest("[data-seeall]")){ trayZeno(); return; }
   if(e.target.closest("[data-sitpc]")){ if(window.openDeskPC) window.openDeskPC(); return; }
@@ -1563,6 +1842,7 @@ document.addEventListener("click", function(e){
   if((el = e.target.closest("[data-gobot]"))){ closeModal(); select(el.dataset.gobot, {list:true}); return; }
   if((el = e.target.closest("[data-gotab]"))){ closeModal(); deselect(); setTab(el.dataset.gotab); return; }
   if((el = e.target.closest("[data-zeno]"))){ goZeno(); return; }
+  if(sel && e.target.closest("#fallback") && !e.target.closest("button, a, [data-bot]")){ deselect(); return; }   /* a tap outside the menu, on the plain list */
   if((el = e.target.closest("[data-bot]"))){ select(el.dataset.bot); return; }
   if((el = e.target.closest("[data-filter]"))){ state.filter=el.dataset.filter; renderAll(); return; }
   if((el = e.target.closest(".tab"))){ setTab(el.dataset.tab); return; }
@@ -1586,6 +1866,7 @@ document.getElementById("hideToggle").addEventListener("click", function(){
 document.addEventListener("keydown", function(e){
   if(e.key!=="Escape") return;
   if(document.getElementById("modal").classList.contains("on")) closeModal();
+  else if(pie) closePie(true);   /* a bot's pie (it closes itself once shown; this is one still waiting for the camera) */
   else if(document.querySelector(".pie,.pc")) return;   /* the desk menu and Desk PC close themselves */
   else if(sel) deselect();
   else if(sheetSnap==="half" || sheetSnap==="full"){ sheetSet("peek"); sheetSum.focus(); }
@@ -1663,6 +1944,9 @@ window.BotOffice = {
   openModal:openModal, goZeno:goZeno,
   /* the selected person (portrait bar, bot card, follow): 'zeno' or a bot id */
   select:select, deselect:deselect, selected:function(){return sel;}, people:people,
+  /* a tap in the office: on a bot (its body, desk or bubble) its menu; on nothing (empty floor) the open one closes */
+  tapBot:function(id, opts){ if(!(opts && opts.list) && pieMode() && sel!==id) openPie(id); else select(id, opts); },
+  tapNothing:function(){ if(performance.now()-pieShut < 700) return; if(pie) closePie(true); else if(sel) deselect(); },   /* one tap closes one thing */
   setFollow:setFollow, following:function(){return following;}, followEnded:followEnded,
   onChange:function(fn){listeners.push(fn);},
   /* sheet state for the 3D layer: how much of the office it covers now, and at its smallest */
@@ -2380,7 +2664,7 @@ function start(){
     fitPoints: [[-RX,0,RZ],[RX,0,RZ],[-RX,0,-RZ],[RX,0,-RZ],[-RX,1.9,-RZ],[RX,1.9,-RZ],[-RX,1.9,RZ],[10,2.45,-RZ+.4]],
     viewRect: () => stageRects().view, freeRect: () => stageRects().free, clampRect: () => stageRects().clamp, topInset: 56,
     pick: (x, y) => pickAt(x, y),
-    onTap: p => { if(!p) return; if(p.task) A.openModal(p.task); else if(p.bot) A.select(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
+    onTap: p => { if(!p){ A.tapNothing(); return; } if(p.task) A.openModal(p.task); else if(p.bot) A.tapBot(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
     onUser: () => { hideHint(); if(!roomGoing) setRoom(null); }, onUnfollow: () => A.followEnded()
   });
   window.officeCam = cam;
@@ -2498,8 +2782,8 @@ function start(){
     hintEl.textContent = coarse.matches ? 'Drag to move · Pinch to zoom · Twist to turn · Double-tap to fly in'
       : 'Drag to move · Right-drag to turn · Scroll to zoom · Double-click to fly in';
     stage.setAttribute('aria-label', coarse.matches
-      ? '3D office. Drag with one finger to move around, pinch to zoom, twist two fingers to turn, double-tap to fly in. Tap a desk to see that bot’s tasks.'
-      : '3D office. Drag to move around, right-drag to turn, scroll to zoom, double-click to fly in; arrow keys move, plus and minus zoom. Click a desk to see that bot’s tasks.');
+      ? '3D office. Drag with one finger to move around, pinch to zoom, twist two fingers to turn, double-tap to fly in. Tap a bot or its desk to open its menu.'
+      : '3D office. Drag to move around, right-drag to turn, scroll to zoom, double-click to fly in; arrow keys move, plus and minus zoom. Click a bot or its desk to open its menu.');
   }
   describe(); coarse.addEventListener('change', describe);
   hintTimer = setTimeout(hideHint, 9000);
@@ -2596,7 +2880,7 @@ function start(){
       if(B.ax < -100 || B.ax > W + 100 || B.ay < -100 || B.ay > H + 100){ hideB(B); continue; }
       paintB(B, B.big || B.id === marked || B.id === hoverId);
       B.depth = camera.position.distanceToSquared(pv.set(w.x, w.y, w.z));
-      B.rank = B.id === marked ? 0 : B.data.kind === 'need' ? 1 : B.id === 'zeno' ? 2 : 3;
+      B.rank = B.id === marked || (saying && B.id === saying.id) ? 0 : B.data.kind === 'need' ? 1 : B.id === 'zeno' ? 2 : 3;   // an answer needs its bubble
       items.push(B);
     }
     items.sort((a, b) => (a.rank - b.rank) || (a.rank === 1 && ((b.data.late - a.data.late) || (b.data.count - a.data.count))) || (a.depth - b.depth));
@@ -2616,6 +2900,45 @@ function start(){
       placed.push(r);
       showB(B, r, dot);
     }
+    placeSay();
+  }
+  /* "What are you on?": one answer at a time, sitting on the person's head bubble (its tail on it), above the
+     office's buttons; that bubble is kept like the selected one's, so the answer always has one to sit on. Framing
+     them leaves room for it (figure's pad), so where it doesn't fit under the top strip they are framed again. It goes
+     after a few seconds, longer for longer words; with reduced motion it still shows, still, and still goes on time */
+  const sayEl = document.createElement('div'); sayEl.className = 'say'; sayEl.setAttribute('aria-hidden', 'true'); sayEl.hidden = true;
+  stage.appendChild(sayEl);
+  let saying = null;   // {id, w, h, until}
+  const SAY_GAP = 11;  // between the answer and the bubble: room for its tail
+  const sayRoom = id => saying && saying.id === id ? saying.h + SAY_GAP : 0;
+  function sayBox(){
+    const S = saying, B = HBY[S.id];
+    if(!B || !B.shown || !B.box) return null;
+    const ax = B.box.x + B.box.w/2;
+    return {x:Math.max(EDGE, Math.min(lastW - EDGE - S.w, ax - S.w/2)), y:B.box.y - SAY_GAP - S.h, w:S.w, h:S.h, ax};
+  }
+  function placeSay(){
+    const S = saying; if(!S) return;
+    if(performance.now() > S.until){ saying = null; sayEl.hidden = true; return; }
+    const r = sayBox();
+    if(!r){ sayEl.style.visibility = 'hidden'; return; }
+    /* never under the top strip (the room chips, the follow pill): if they stood up after being framed, it stays clear of
+       the strip and overlaps their bubble instead */
+    const lim = obstacles.reduce((t, o) => o.y + o.h < lastH/3 && o.x < r.x + r.w && o.x + o.w > r.x ? Math.max(t, o.y + o.h + 4) : t, EDGE);
+    const x = Math.round(r.x), y = Math.round(Math.max(lim, r.y));
+    sayEl.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+    sayEl.style.setProperty('--tx', Math.round(Math.max(14 - S.w/2, Math.min(S.w/2 - 14, r.ax - x - S.w/2))) + 'px');
+    sayEl.style.visibility = 'visible';
+  }
+  function tell(id, text, secs){
+    if(!where(id) || !lastW) return false;
+    sayEl.textContent = text; sayEl.hidden = false; sayEl.style.visibility = 'hidden';
+    sayEl.style.maxWidth = Math.min(240, Math.round(lastW*.62)) + 'px';
+    saying = {id, w:sayEl.offsetWidth, h:sayEl.offsetHeight, until:performance.now() + 1000*(secs || Math.min(9, 4 + .06*text.length))};
+    const r = sayBox(), hit = r && obstacles.some(o => r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y);
+    if(!r || r.y < EDGE || hit) focus(id, 450);   // no room over their head (or not in view): frame them with room for it
+    placeSay(); redraw = true;
+    return true;
   }
   new ResizeObserver(resize).observe(stage);
   resize();
@@ -2816,7 +3139,7 @@ function start(){
     return true;
   }
   function idleTick(t, dt){
-    const busy = document.querySelector('.modal.on, .pc, .pie');
+    const busy = document.querySelector('.modal.on, .pc, .pie, .botpie');
     if(!busy && t > nextIdle && walkers.length === 0){
       nextIdle = t + 14 + Math.random()*10;
       const pool = DESKS.filter(d => !d.working || IDLES[d.b.id]);
@@ -2866,7 +3189,7 @@ function start(){
   /* what a close-up must fit: from the top of the head bubble, whose tail points at a spot over the head and which is
      CHIP_H pixels tall at any zoom (with the gold rim), down to the front of the gold ring on the floor */
   const CHIP_H = 29;
-  const figure = id => ({get fig(){ return BUB_Y(id) + riseOf(id); }, pad:CHIP_H, ring:RING_R});   // read each frame: a walker stands taller
+  const figure = id => ({get fig(){ return BUB_Y(id) + riseOf(id); }, get pad(){ return CHIP_H + sayRoom(id); }, ring:RING_R});   // read each frame: a walker stands taller, an answer needs room
   /* what the person is doing, read from the scene and the task data only: no invented moods */
   const ERRANDS = {keepy:['⚽', 'Keepy-ups'], sofa:['📰', 'Reading the paper on the sofa'], laps:['🚶', 'Walking a lap'], coffee:['☕', 'Coffee run for Zeno'], cooler:['💧', 'Water break']};
   const ZENO_DOING = {sit:['🪑', 'At the desk'], sitdown:['🪑', 'Sitting down at the desk'], rise:['🧍', 'Getting up from the desk'], go:['🚶', 'Heading to the desk'], putt:['⛳', 'Putting on the green'], look:['👀', 'Looking around the floor'], coffee:['☕', 'Coffee with Miko'], walk:['🚶', 'Walking the floor']};
@@ -2932,7 +3255,9 @@ function start(){
     return HB.map(B => ({id:B.id, shown:B.shown, dot:B.dot, named:B.named, x:B.box ? B.box.x : NaN, y:B.box ? B.box.y : NaN,
       w:B.box ? B.box.w : 0, h:B.box ? B.box.h : 0, ax:B.ax, ay:B.ay}));
   }
-  A.scene = {where, pose, errand, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom};
+  /* where a pie's middle goes: the person's face, in client px (null behind the camera) */
+  function anchor(id){ const w = where(id); if(!w) return null; const p = cam.project(w.x, w.y + HEAD_TOP(id)*.88 + w.rise, w.z); return p[2] < 1 ? [p[0], p[1]] : null; }
+  A.scene = {where, pose, errand, activity, focus, follow, mark, bubbles, capsules, walls, room:goRoom, say:tell, anchor};
 
   /* ---------- fewer draw calls: what never moves is merged, one mesh per kind of material ----------
      The office is built from about 800 small meshes, each its own draw call. The furniture never moves, so once it is
