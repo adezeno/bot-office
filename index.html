@@ -413,7 +413,7 @@ details.more2 summary{cursor:pointer;font-weight:700;color:var(--steel)}
     <div class="howpop" id="howPop" role="note" hidden>
       <p class="howfacts"><span id="asof"></span><span>Synced from <b>Jarvis</b> · <span id="builtAt"></span></span><span id="lastApplied"></span></p>
       <p id="sources"></p>
-      <p>A change you make here becomes a public GitHub request (you confirm first; first names only). GitHub applies it to this office in about a minute, shown as “Waiting for Jarvis to confirm”. Jarvis copies it to his Tasks page, the source of truth, and rebuilds this board every hour. <b>Sync with Jarvis</b> stays on this page: it checks for a newer board and reloads by itself when one arrives.</p>
+      <p>On a device you’ve unlocked at your Desk PC, a change you make here becomes a public GitHub request (you confirm first; first names only). Everywhere else the board is read-only. GitHub applies it to this office in about a minute, shown as “Waiting for Jarvis to confirm”. Jarvis copies it to his Tasks page, the source of truth, and rebuilds this board every hour. <b>Sync with Jarvis</b> stays on this page: it checks for a newer board and reloads by itself when one arrives.</p>
     </div>
   </div>
 </header>
@@ -911,7 +911,126 @@ function publicSafe(s){
     .replace(/\b([A-Z][a-z]+)\s+(?:Chong|Lim|Tan|Wong|Lee|Ng|Hong|Kee|Soh|Chaw)\b/g,"$1")
     .replace(/https?:\/\/cursor\.com\/\S+/g,"[private link]");
 }
-function canChange(t){ return t && t.src===SRC_TASKS && isOpen(t) && /^AG-\d+$/.test(t.id||""); }
+function changeable(t){ return t && t.src===SRC_TASKS && isOpen(t) && /^AG-\d+$/.test(t.id||""); }
+/* change requests come only from Zeno's own unlocked devices (the owner key, below) */
+function canChange(t){ return isOwner() && changeable(t); }
+
+/* ---------- owner key: Zeno's own devices, unlocked once at the Desk PC ----------
+   owner.lock.json holds the My Pages links sealed with Zeno's password (tools/owner_key.py: PBKDF2-SHA256, 600,000
+   rounds, then AES-GCM-256), or {"v":1,"set":false} while there is no password: then every device is a visitor.
+   Unlocking derives the key once and keeps it in IndexedDB, non-extractable, so the device stays unlocked; a new
+   password locks it again. Visitors and locked devices get locked tiles and no change buttons. Hiding the buttons
+   protects nothing by itself: the sync only acts on the owner's own GitHub requests (tools/gate.py). */
+var OWNER_LOCK = "owner.lock.json", OWNER_DB = "botoffice.owner", OWNER_FLAG = "botoffice.owner.v1";
+var owner = {state:"checking", pages:null, key:null, notice:"", busy:null, seen:0};
+function isOwner(){ return owner.state==="owner"; }
+function ownerWhy(k){ var e = new Error("owner key: "+k); e.why = k; return e; }
+function ownerBytes(s){ var b = atob(s), a = new Uint8Array(b.length); for(var i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+function sealedLock(j){
+  return !!j && j.v===1 && j.kdf==="PBKDF2-SHA256" && Number.isInteger(j.iter) && j.iter>=1e5 && j.iter<=1e7 &&
+    ["salt","iv","ct"].every(function(k){ return typeof j[k]==="string" && /^[A-Za-z0-9+\/]+={0,2}$/.test(j[k]); });
+}
+/* the lock on the site: a sealed one, or null when there is none (the placeholder, a missing or broken file). Rejects
+   only when the site can't be asked */
+function readLock(){
+  return fetch(OWNER_LOCK, {cache:"no-cache"}).then(function(r){
+    if(!r.ok) return null;
+    return r.json().then(function(j){ return sealedLock(j) ? j : null; }, function(){ return null; });
+  });
+}
+/* one IndexedDB request on the key store; resolves with its result once the transaction is done */
+function ownerDB(mode, fn){
+  return new Promise(function(ok, no){
+    var rq;
+    try { rq = indexedDB.open(OWNER_DB, 1); } catch(e){ no(e); return; }
+    rq.onupgradeneeded = function(){ rq.result.createObjectStore("keys"); };
+    rq.onerror = function(){ no(rq.error); };
+    rq.onblocked = function(){ no(new Error("blocked")); };
+    rq.onsuccess = function(){
+      var db = rq.result, tx, r;
+      try { tx = db.transaction("keys", mode); r = fn(tx.objectStore("keys")); } catch(e){ db.close(); no(e); return; }
+      tx.oncomplete = function(){ db.close(); ok(r && r.result); };
+      tx.onerror = tx.onabort = function(){ db.close(); no(tx.error || new Error("aborted")); };
+    };
+  });
+}
+function ownerFlag(on){ try { if(on) localStorage.setItem(OWNER_FLAG, String(Date.now())); else localStorage.removeItem(OWNER_FLAG); return true; } catch(e){ return false; } }
+function deriveKey(pw, lock){
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]).then(function(base){
+    return crypto.subtle.deriveKey({name:"PBKDF2", hash:"SHA-256", salt:ownerBytes(lock.salt), iterations:lock.iter}, base, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+  });
+}
+function openLock(key, lock){
+  return crypto.subtle.decrypt({name:"AES-GCM", iv:ownerBytes(lock.iv)}, key, ownerBytes(lock.ct)).then(function(buf){
+    var b = JSON.parse(new TextDecoder().decode(buf));
+    if(!b || b.v!==1 || !b.pages || typeof b.pages!=="object") throw new Error("not an owner bundle");
+    return b;
+  });
+}
+function setOwner(st, pages, notice){
+  var was = owner.state;
+  owner.state = st; owner.pages = st==="owner" ? pages : null; owner.notice = notice || "";
+  if(was!==st) ownerViews();
+  else listeners.forEach(function(fn){fn("owner");});   /* same state, new links or notice: the Desk PC redraws */
+}
+/* what this device is now: the key it kept (here, or in IndexedDB once flagged) against the lock on the site */
+function ownerCheck(){
+  var flagged = false; try { flagged = !!localStorage.getItem(OWNER_FLAG); } catch(e){}
+  var stored = owner.key ? Promise.resolve(owner.key) : !flagged ? Promise.resolve(null) :
+    ownerDB("readonly", function(s){ return s.get("owner"); }).then(function(r){ return r && r.key || null; }, function(){ return null; });
+  owner.seen = Date.now();
+  return Promise.all([stored, readLock()]).then(function(v){
+    var key = v[0], lock = v[1];
+    if(!lock || !(window.crypto && crypto.subtle)) return setOwner(lock ? "locked" : "none");   /* no owner key on the site: a kept key waits */
+    if(!key) return setOwner("locked", null, owner.state==="locked" ? owner.notice : "");
+    return openLock(key, lock).then(function(b){ owner.key = key; setOwner("owner", b.pages, owner.notice==="visit" ? "visit" : ""); }, function(){
+      /* this key doesn't open the lock on the site any more: the password changed. Forget it */
+      owner.key = null; ownerFlag(false); ownerDB("readwrite", function(s){ return s.delete("owner"); }).catch(function(){});
+      setOwner("locked", null, "changed");
+    });
+  }, function(){ if(owner.state==="checking") setOwner(flagged || owner.key ? "locked" : "none"); });   /* offline: try again later */
+}
+/* unlock with Zeno's password: the key is derived once (a second call meanwhile shares it), checked against the lock,
+   then kept. Rejects with .why: wrong, offline, none (no owner key on the site), nocrypto */
+function unlock(pw){
+  if(!(window.crypto && crypto.subtle)) return Promise.reject(ownerWhy("nocrypto"));
+  if(owner.busy) return owner.busy;
+  var p = owner.busy = readLock().catch(function(){ throw ownerWhy("offline"); }).then(function(lock){
+    if(!lock){ if(owner.state==="locked") setOwner("none"); throw ownerWhy("none"); }
+    return deriveKey(String(pw||""), lock).then(function(key){
+      return openLock(key, lock).catch(function(){ throw ownerWhy("wrong"); }).then(function(b){
+        return ownerDB("readwrite", function(s){ return s.put({key:key, at:Date.now()}, "owner"); })
+          .then(function(){ return ownerFlag(true); }, function(){ return false; }).then(function(kept){
+            owner.key = key; setOwner("owner", b.pages, kept ? "" : "visit");
+            return {kept:kept};
+          });
+      });
+    });
+  });
+  p.then(function(){ owner.busy = null; }, function(){ owner.busy = null; });
+  return p;
+}
+/* Lock this device: the key goes, here and in every tab (they hear the flag go) */
+function lockDevice(){
+  owner.key = null; ownerFlag(false);
+  return ownerDB("readwrite", function(s){ return s.delete("owner"); }).catch(function(){}).then(function(){ setOwner("locked"); });
+}
+/* a My Pages link for an unlocked device: only an https link sealed under this same id and name (a pages.json and a
+   lock from different builds never mix up two Pages) */
+function ownerLink(id, name){
+  var p = isOwner() && owner.pages && id && Object.prototype.hasOwnProperty.call(owner.pages, id) ? owner.pages[id] : null;
+  if(!p || p.name!==name || typeof p.url!=="string") return null;
+  try { return new URL(p.url).protocol==="https:" ? p.url : null; } catch(e){ return null; }
+}
+/* the owner state changed: whatever shows change buttons is drawn again */
+function ownerViews(){
+  if(sel) renderCard();
+  var m = document.getElementById("modal");
+  if(state.modal && m.classList.contains("on")){ var f=lastFocus; openModal(state.modal); lastFocus=f; }
+  listeners.forEach(function(fn){fn("owner");});
+}
+window.addEventListener("storage", function(e){ if(e.key===OWNER_FLAG){ owner.key = null; ownerCheck(); } });   /* unlocked or locked in another tab */
+document.addEventListener("visibilitychange", function(){ if(!document.hidden && Date.now()-owner.seen > 6e4) ownerCheck(); });
 function reqTitle(r){
   return "["+r.taskId+"] "+(r.action==="done" ? "Mark done" : r.action==="stage" ? "Move to "+r.value : "Change next step");
 }
@@ -958,10 +1077,10 @@ function pendHTML(t){
   if(r) return '<div class="pend" role="status"><span class="pchip">Pending sync</span><span>Asked Jarvis to '+asked(r)+', <span data-sent="'+esc(t.id)+'" data-long="1">sent '+ago(r)+'</span>. Not on the board yet.'+
       (r.issue ? ' Request #'+esc(r.issue)+' is open on GitHub.' : '')+'</span>'+
     '<span class="pacts">'+(r.issue ? '<a href="https://github.com/adezeno/bot-office/issues/'+esc(r.issue)+'" target="_blank" rel="noopener">See request #'+esc(r.issue)+'</a>'
-      : '<a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>')+
+      : isOwner() ? '<a href="'+esc(issueURL(r))+'" target="_blank" rel="noopener">Open request again</a>' : '')+
     '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button>'+
     '<button type="button" class="linkbtn" data-withdraw="'+esc(t.id)+'">'+(r.issue ? 'Clear this mark' : 'Withdraw')+'</button></span></div>';
-  if(u) return '<div class="pend" role="status"><span>GitHub didn\u2019t open (a pop-up blocker?), so nothing was sent.</span>'+
+  if(u && isOwner()) return '<div class="pend" role="status"><span>GitHub didn\u2019t open (a pop-up blocker?), so nothing was sent.</span>'+
     '<span class="pacts"><a href="'+esc(issueURL(u))+'" target="_blank" rel="noopener" data-sendlink="'+esc(t.id)+'">Open the request on GitHub</a>'+
     '<button type="button" class="linkbtn" data-copy="'+esc(t.id)+'">Copy for Jarvis</button></span></div>';
   if(w) return '<div class="pend" role="status"><span>Withdrawn here. If you already pressed Submit on GitHub, close that request there too.</span>'+
@@ -1102,7 +1221,7 @@ function botCardHTML(id){
     return '<div class="crow static"><span class="tt">'+T(d.client)+' · '+T(d.product)+'</span><span class="row"><b>Stage:</b> '+esc(d.stage)+' · <b>Next:</b> '+T(d.next)+'</span>'+
       '<span class="tags"><span class="tag id">'+esc(d.id)+'</span>'+(d.taskId?'<span class="tag">Task '+esc(d.taskId)+'</span>':'')+'</span></div>';
   }).join("")+'</div>';
-  h += '<div class="srcnote">Source: '+(id==="steve"?SRC_ARENA:SRC_TASKS)+' · data as of '+esc(asOf)+'. '+(id==="steve"?'Read-only.':'Tap a task to see it or to ask Jarvis to change it.')+'</div>';
+  h += '<div class="srcnote">Source: '+(id==="steve"?SRC_ARENA:SRC_TASKS)+' · data as of '+esc(asOf)+'. '+(id==="steve"?'Read-only.':isOwner()?'Tap a task to see it or to ask Jarvis to change it.':'Tap a task to see it.')+'</div>';
   return h;
 }
 function renderCard(){
@@ -1202,7 +1321,8 @@ function openModal(k){ openedAt=Date.now();
   if(t.note) html += '<div class="field"><div class="k">Note</div>'+T(t.note)+'</div>';
   if(canChange(t) || pending[t.id]) html += '<div class="field"><div class="k">Ask Jarvis to change this</div>'+pendHTML(t)+actsHTML(t)+'</div>';
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn dark" data-gobot="'+b.id+'">See all of '+esc(b.name)+'\'s tasks</button>'+(t.checklist?'<button class="btn" data-gotab="own">See who owns what</button>':"")+'</div>';
-  html += '<div class="srcnote">Source: '+esc(t.src)+'. '+(canChange(t) ? 'Changes go to Jarvis as a request; Jarvis\'s board stays the source of truth.' : 'Read-only, nothing here changes the real list.')+'</div></div>';
+  html += '<div class="srcnote">Source: '+esc(t.src)+'. '+(canChange(t) ? 'Changes go to Jarvis as a request; Jarvis\'s board stays the source of truth.' :
+    changeable(t) && owner.state==="locked" ? 'Read-only on this device. Unlock your desk at your Desk PC to ask Jarvis for changes.' : 'Read-only, nothing here changes the real list.')+'</div></div>';
   var m = document.getElementById("modal"), box = document.getElementById("mbox");
   box.innerHTML = html; m.setAttribute("aria-labelledby","mTitle");
   m.classList.add("on"); m.setAttribute("aria-hidden","false"); state.modalOn = true;
@@ -1541,6 +1661,9 @@ window.BotOffice = {
   /* a room chip was pressed (or let go of, null): the link follows it */
   roomChanged:function(id){ linkRoom = id; writeLink(); },
   link:function(){ return location.hash || ""; },
+  /* the owner key: state() checking|none|locked|owner; link(id, name) a Page's link on an unlocked device, else null */
+  owner:{state:function(){return owner.state;}, on:isOwner, link:ownerLink, unlock:unlock, lock:lockDevice,
+    refresh:ownerCheck, notice:function(){return owner.notice;}},
   showFallback:showFallback,
   ready:function(){ ready3d=true; var l=document.getElementById("loading"); if(l) l.hidden=true; startLink(); }
 };
@@ -1549,6 +1672,7 @@ setTimeout(function(){ if(!ready3d) showFallback("The 3D office didn't load. It 
 /* the first placement doesn't slide: the sheet starts where it belongs */
 appEl.classList.add("dragging"); renderAll(); setTab("floor"); sheetSet("peek");
 requestAnimationFrame(function(){ requestAnimationFrame(function(){ appEl.classList.remove("dragging"); }); });
+ownerCheck();   /* until it answers, this device is a visitor */
 })();
 </script>
 
@@ -3406,7 +3530,13 @@ function createMapCam(o){
 (function(){
   var APPS=[["🏢", "Gana Teguh Office", "https://adezeno.github.io/bot-office/", "Live · this office"]];
   var LOCK='<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 7.5V5.2a3 3 0 0 1 6 0v2.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><rect x="2.8" y="7" width="10.4" height="7.6" rx="1.8" fill="currentColor"/></svg>';
-  var LOCKED_MSG="Private link. Open it where you’re signed in.";   /* what a tap on a locked Page says (the owner key, Stage 9, changes it) */
+  /* what a tap on a locked Page says: no owner key on the site, a locked device, or an unlocked one whose key has no
+     link for that Page */
+  var LOCKED_MSG={none:"Private link. Open it where you’re signed in.", locked:"Private link. Unlock your desk to open it.",
+    owner:"No link for this Page in your desk key yet."};
+  var UNLOCKED='<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M11 7.5V5.2a3 3 0 0 0-6 0v.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><rect x="2.8" y="7" width="10.4" height="7.6" rx="1.8" fill="currentColor"/></svg>';
+  var O=function(){ return window.BotOffice && window.BotOffice.owner; }, cur=null;   /* cur: the open Desk PC */
+  if(window.BotOffice) window.BotOffice.onChange(function(k){ if(k==="owner" && cur) cur.changed(); });   /* unlocked or locked here or in another tab */
   var css=document.createElement("style");css.textContent=`
   .pie{position:fixed;z-index:60;width:0;height:0}
   .pie .hub{position:absolute;left:-26px;top:-26px;width:52px;height:52px;border-radius:50%;background:radial-gradient(#7CFC8A,#1f9e3a);box-shadow:0 0 0 4px #fff8,0 6px 18px #0006;display:grid;place-items:center;font-size:24px;animation:pop .18s ease-out}
@@ -3444,6 +3574,25 @@ function createMapCam(o){
   .pc .app>span:first-child{font-size:34px;min-height:1.45em;filter:drop-shadow(0 2px 3px #0005)}.pc .app b{font-size:13px}.pc .app i{font-size:11px;opacity:.85;font-style:normal}
   .pc .pghd{margin:16px 0 8px;font-size:16px}
   .pc .note{margin-top:12px;font-size:12px;opacity:.9}
+  /* the owner key: this device's state, the Unlock form and Lock this device */
+  .pc .pcown{margin:0 0 12px}
+  .pc .ownbody{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px}
+  .pc .pcown .note{flex:1 1 220px;margin:0}
+  .pc .pcbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 18px;border-radius:999px;border:2px solid #fff;background:#fff;color:#123e73;font:700 14px "Trebuchet MS",sans-serif;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:transform .12s}
+  .pc .pcbtn.ghost{background:transparent;color:#fff}
+  @media (hover:hover){.pc .pcbtn:hover{background:#e3eeff}.pc .pcbtn.ghost:hover{background:#ffffff26}}
+  .pc .pcbtn:active{transform:scale(.97)}
+  .pc .pcbtn:focus-visible{outline:2px solid #ffd166;outline-offset:2px}
+  .pc .pcbtn[disabled]{opacity:.6;cursor:progress}
+  .pc .pcbtn[hidden]{display:none}
+  .pc .unlock{flex:1 1 100%;max-width:440px;box-sizing:border-box;display:grid;gap:10px;margin:0;padding:14px;border-radius:14px;background:#0b2340d9;border:1px solid #ffffff59}
+  .pc .unlock label{display:grid;gap:4px;font-size:13px;font-weight:700}
+  .pc .unlock input{box-sizing:border-box;width:100%;min-height:44px;padding:8px 12px;border-radius:10px;border:2px solid #ffffff80;background:#fff;color:#1a1612;font:16px "Trebuchet MS",sans-serif;caret-color:#123e73}
+  .pc .unlock input:focus-visible{outline:3px solid #ffd166;outline-offset:1px}
+  .pc .unlock .urow{display:flex;flex-wrap:wrap;gap:10px}
+  .pc .unlock .uhelp{margin:0;font-size:12px;opacity:.9}
+  .pc .unlock .ustat{margin:0;font-size:14px;font-weight:700}
+  .pc .unlock .ustat.bad{color:#ffd7d7}
   .sitfx{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:65;background:#fff;color:#1a1612;font:800 16px "Trebuchet MS";padding:10px 18px;border-radius:999px;box-shadow:0 6px 20px #0005;animation:pop .2s}`;
   document.head.appendChild(css);
   var lx=innerWidth/2, ly=innerHeight/2, pie=null;
@@ -3459,22 +3608,90 @@ function createMapCam(o){
       var o=document.createElement("div");o.className="pc";o.setAttribute("role","dialog");o.setAttribute("aria-label","Your desk computer: dashboards");
       o.innerHTML='<div class="mon"><div class="scr"><div class="pcbar"><span style="font-size:22px">💻</span><b>Desk PC</b><small>'+new Date().toLocaleTimeString("en-GB",{timeZone:"Asia/Kuching",hour:"2-digit",minute:"2-digit"})+' (UTC+8)</small><button class="x" type="button">Stand up ✕</button></div><div class="grid">'+
         APPS.map(function(a){return '<a class="app" target="_blank" rel="noopener" href="'+esc(a[2])+'"><span>'+a[0]+'</span><b>'+esc(a[1])+'</b><i>'+esc(a[3])+'</i></a>';}).join("")+
-        '</div><h3 class="pghd">📄 My Pages</h3><div class="note" style="margin:0 0 10px"><span class="lock" aria-hidden="true">'+LOCK+'</span>Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
+        '</div><h3 class="pghd">📄 My Pages</h3><div class="pcown"><div class="ownbody"></div><p class="sr" role="status" aria-live="polite"></p></div><div class="grid" id="pcPages"><div class="note">Loading your Pages…</div></div></div></div>';
       document.body.appendChild(o); window.zenoPC&&window.zenoPC(true); if(window.BotOffice) window.BotOffice.state.pc=true;   /* the office under it isn't drawn */
-      fetch("pages.json?v="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){
-        var g=o.querySelector("#pcPages"); if(!g) return;
-        g.innerHTML=(j.pages||[]).map(function(a){ var tile='<span aria-hidden="true">'+esc(a.icon)+'</span><b>'+esc(a.name)+'</b><i>'+esc(a.group)+'</i>'; return /^https:\/\/cursor\.com\//.test(a.url) ? '<a class="app" target="_blank" rel="noopener" href="'+esc(a.url)+'">'+tile+'</a>' : '<button type="button" class="app" aria-disabled="true">'+tile+'<span class="lock" aria-hidden="true">'+LOCK+'</span><span class="sr">Private link</span></button>'; }).join("") || '<div class="note">No Pages found.</div>';
-      }).catch(function(){ var g=o.querySelector("#pcPages"); if(g) g.innerHTML='<div class="note">Couldn\u2019t load your Pages. Check your connection and sit down again.</div>'; });
+      var me={}, pages=null, own=o.querySelector(".ownbody"), said=o.querySelector(".pcown [role=status]"), g=o.querySelector("#pcPages"); cur=me;
+      function st(){ var x=O(); return x ? x.state() : "none"; }
+      /* this device: no owner key on the site, locked (Unlock my desk) or unlocked (Lock this device) */
+      function drawOwn(){
+        var s=st(), n=O() ? O().notice() : "";
+        own.dataset.st=s;
+        own.innerHTML = s==="owner" ? '<div class="note"><span class="lock" aria-hidden="true">'+UNLOCKED+'</span>This device: owner'+(n==="visit" ? ', for this visit only: this browser won’t keep the key.' : '. Your Pages open from these tiles.')+'</div><button type="button" class="pcbtn ghost" data-lock>Lock this device</button>'
+          : s==="locked" ? '<div class="note"><span class="lock" aria-hidden="true">'+LOCK+'</span>'+(n==="changed" ? 'Your desk key changed, so this device locked itself. Unlock your desk again to open your Pages here.' : 'This device is locked. Unlock your desk to open your Pages here.')+'</div><button type="button" class="pcbtn" data-unlock aria-expanded="false">🔑 Unlock my desk</button>'
+          : '<div class="note"><span class="lock" aria-hidden="true">'+LOCK+'</span>Page links are private, so they aren’t on this public site. Open your Pages where you’re signed in.</div>';
+      }
+      /* a tile is a real link only on an unlocked device, with the link sealed for that Page */
+      function tile(a){
+        var face='<span aria-hidden="true">'+esc(a.icon)+'</span><b>'+esc(a.name)+'</b><i>'+esc(a.group)+'</i>', u=O() && O().link(a.id, a.name);
+        return u ? '<a class="app" target="_blank" rel="noopener noreferrer" href="'+esc(u)+'" data-id="'+esc(a.id)+'">'+face+'</a>'
+          : '<button type="button" class="app" aria-disabled="true" data-id="'+esc(a.id||"")+'">'+face+'<span class="lock" aria-hidden="true">'+LOCK+'</span><span class="sr">Private link</span></button>';
+      }
+      function drawTiles(){
+        if(!pages) return;
+        var f=document.activeElement, id=f && g.contains(f) ? f.dataset.id : null;
+        g.innerHTML=pages.map(tile).join("") || '<div class="note">No Pages found.</div>';
+        if(id) [].some.call(g.querySelectorAll(".app"), function(n){ if(n.dataset.id===id){ n.focus({preventScroll:true}); return true; } });   /* a redraw keeps its tile in focus */
+      }
+      /* an owner change redraws the strip and the tiles; a form being filled in stays */
+      me.changed=function(){ if(!(form() && own.dataset.st==="locked" && st()==="locked")) drawOwn(); drawTiles(); };
+      Promise.all([fetch("pages.json?v="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}), O() ? O().refresh() : null]).then(function(v){
+        if(cur!==me) return; pages=v[0].pages||[]; me.changed();
+      }).catch(function(){ if(cur!==me) return; drawOwn(); g.innerHTML='<div class="note">Couldn’t load your Pages. Check your connection and sit down again.</div>'; });
+      /* keep el on the PC's own screen, clear of its sticky bar (the office behind it never scrolls) */
+      function show(el){
+        var scr=o.querySelector(".scr"), top=o.querySelector(".pcbar").getBoundingClientRect().bottom+8, bot=scr.getBoundingClientRect().bottom-8, r=el.getBoundingClientRect();
+        if(r.top<top) scr.scrollTop-=top-r.top; else if(r.bottom>bot) scr.scrollTop+=Math.min(r.bottom-bot, r.top-top);
+      }
+      function form(){ return own.querySelector("form.unlock"); }
+      /* Unlock my desk: a real form, so the Passwords app can fill it */
+      function openForm(){
+        var b=own.querySelector("[data-unlock]"); if(!b || form()) return;
+        b.hidden=true; b.setAttribute("aria-expanded","true");
+        own.insertAdjacentHTML("beforeend",'<form class="unlock" aria-label="Unlock my desk" novalidate>'+
+          '<label>Name<input name="username" autocomplete="username" value="zeno" autocapitalize="none" autocorrect="off" spellcheck="false"></label>'+
+          '<label>Password<input type="password" name="password" autocomplete="current-password"></label>'+
+          '<p class="ustat" role="status" aria-live="polite"></p>'+
+          '<p class="uhelp">This unlocks this device only. Your Passwords app can fill it in.</p>'+
+          '<div class="urow"><button type="submit" class="pcbtn">Unlock</button><button type="button" class="pcbtn ghost" data-cancel>Cancel</button></div></form>');
+        form().querySelector("input[type=password]").focus({preventScroll:true}); show(form());
+      }
+      function closeForm(){ var f=form(), b=own.querySelector("[data-unlock]"); if(f) f.remove(); if(b){ b.hidden=false; b.setAttribute("aria-expanded","false"); b.focus({preventScroll:true}); } }
+      var WHY={wrong:"That password didn’t open your desk. Check it and try again.", offline:"Couldn’t reach the office to check it. Check your connection and try again.",
+        none:"There’s no owner key on this site yet, so there’s nothing to unlock.", nocrypto:"This browser can’t unlock the desk. Try Safari or Chrome."};
+      function submit(f){
+        var p=f.querySelector("input[type=password]"), b=f.querySelector("button[type=submit]"), s=f.querySelector(".ustat");
+        if(f.dataset.busy) return;
+        if(!p.value){ s.textContent="Type your password first."; s.classList.add("bad"); p.focus(); return; }
+        f.dataset.busy="1"; b.disabled=true; p.readOnly=true; s.classList.remove("bad"); s.textContent="Unlocking…";
+        O().unlock(p.value).then(function(){
+          if(cur!==me) return;
+          said.textContent="Unlocked. Your Pages open from these tiles.";
+          show(own); var a=g.querySelector("a.app"); if(a) a.focus({preventScroll:true});
+        }, function(e){
+          if(cur!==me || !f.isConnected) return;
+          delete f.dataset.busy; b.disabled=false; p.readOnly=false;
+          s.textContent=WHY[e && e.why] || WHY.nocrypto; s.classList.add("bad");
+          p.focus({preventScroll:true}); p.select(); show(p);
+        });
+      }
+      function lockIt(){
+        O().lock().then(function(){ if(cur!==me) return; said.textContent="Locked. This device is a visitor again."; var b=own.querySelector("[data-unlock]"); if(b) b.focus({preventScroll:true}); });
+      }
       /* a locked Page answers a tap at once: its padlock rattles and the screen says why it doesn't open */
       var toast=document.createElement("div"), tt=0; toast.className="pctoast"; toast.setAttribute("role","status"); o.querySelector(".mon").appendChild(toast);
       function locked(t){
-        toast.innerHTML=LOCK+'<span>'+LOCKED_MSG+'</span>'; toast.classList.add("on");
+        toast.innerHTML=LOCK+'<span>'+(LOCKED_MSG[st()] || LOCKED_MSG.none)+'</span>'; toast.classList.add("on");
         clearTimeout(tt); tt=setTimeout(function(){ toast.classList.remove("on"); tt=setTimeout(function(){ toast.textContent=""; },250); },3000);   /* faded words go too, so a screen reader finds nothing unseen */
         var l=t.querySelector(".lock"); l.classList.remove("rattle"); void l.offsetWidth; l.classList.add("rattle");
       }
       o.addEventListener("touchstart",function(){},{passive:true});   /* iOS Safari shows :active only where a touch listener is */
-      function shut(){clearTimeout(tt);o.remove();removeEventListener("keydown",k);if(window.BotOffice) window.BotOffice.state.pc=false;window.zenoStand&&window.zenoStand();} function k(e){if(e.key==="Escape")shut();}
-      addEventListener("keydown",k); o.querySelector(".x").onclick=shut; o.onclick=function(e){var t=e.target.closest("button.app"); if(t) locked(t); else if(e.target===o) shut();};
+      function shut(){cur=null;clearTimeout(tt);o.remove();removeEventListener("keydown",k);if(window.BotOffice) window.BotOffice.state.pc=false;window.zenoStand&&window.zenoStand();}
+      function k(e){ if(e.key==="Escape"){ if(form()) closeForm(); else shut(); } }   /* Escape closes the Unlock form first */
+      addEventListener("keydown",k); o.querySelector(".x").onclick=shut;
+      o.onclick=function(e){ var t=e.target.closest("button.app");
+        if(t) locked(t); else if(e.target.closest("[data-unlock]")) openForm(); else if(e.target.closest("[data-cancel]")) closeForm();
+        else if(e.target.closest("[data-lock]")) lockIt(); else if(e.target===o) shut(); };
+      o.addEventListener("submit",function(e){ if(e.target.matches("form.unlock")){ e.preventDefault(); submit(e.target); } });
       o.querySelector("a.app").focus();
     },650);
   }

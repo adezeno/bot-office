@@ -1,76 +1,91 @@
 {
  "pages": [
   {
+   "id": "p01",
    "icon": "✅",
    "name": "Jarvis · Tasks",
    "group": "Task board (source of truth)"
   },
   {
+   "id": "p02",
    "icon": "🛡️",
    "name": "Prudential pilot",
    "group": "Insurance"
   },
   {
+   "id": "p03",
    "icon": "🖤",
    "name": "Insurance Black Card",
    "group": "Insurance"
   },
   {
+   "id": "p04",
    "icon": "📋",
    "name": "Policyholder dashboard",
    "group": "Insurance"
   },
   {
+   "id": "p05",
    "icon": "❤️",
    "name": "Life & Medical book",
    "group": "Clients"
   },
   {
+   "id": "p06",
    "icon": "📈",
    "name": "Eastspring client book",
    "group": "Unit trust"
   },
   {
+   "id": "p07",
    "icon": "💼",
    "name": "Portfolio analysis",
    "group": "Unit trust"
   },
   {
+   "id": "p08",
    "icon": "🌏",
    "name": "Market dashboard",
    "group": "Markets"
   },
   {
+   "id": "p09",
    "icon": "🔭",
    "name": "Big Picture Outlook",
    "group": "Markets"
   },
   {
+   "id": "p10",
    "icon": "💰",
    "name": "Zeno's Money",
    "group": "Personal finance"
   },
   {
+   "id": "p11",
    "icon": "🏋️",
    "name": "Training",
    "group": "Health"
   },
   {
+   "id": "p12",
    "icon": "📰",
    "name": "World Today",
    "group": "News"
   },
   {
+   "id": "p13",
    "icon": "📝",
    "name": "Zeno's Notes",
    "group": "Notes"
   },
   {
+   "id": "p14",
    "icon": "🧠",
    "name": "Second Brain",
    "group": "Notes"
   },
   {
+   "id": "p15",
    "icon": "💡",
    "name": "Idea Map",
    "group": "Notes"
