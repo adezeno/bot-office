@@ -1,7 +1,7 @@
 window.OFFICE_DATA = {
  "asOf": "2026-11-02",
- "syncedAt": "2026-11-05T05:50:08.000Z",
- "builtAt": "2026-11-05 13:50 (UTC+8 Asia/Kuching)",
+ "syncedAt": "2026-11-05T06:51:23.000Z",
+ "builtAt": "2026-11-05 14:51 (UTC+8 Asia/Kuching)",
  "sources": {
   "tasks": "Jarvis · Tasks board"
  },
