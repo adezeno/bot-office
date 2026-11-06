@@ -1405,7 +1405,9 @@ function whatOn(id){
 /* said over the bot in the office; without one (the plain list) in the menu itself. Read out either way */
 var said = null;
 function sayWhatOn(id){
-  var text = whatOn(id), inOffice = !!(A3() && A3().say && A3().say(id, text));
+  var text = whatOn(id);
+  if(A3() && sheetSnap==="full") sheetSet("half");   /* the full sheet hides the office: bring it down so the answer shows */
+  var inOffice = !!(A3() && A3().say && A3().say(id, text));
   said = inOffice ? null : {id:id, text:text};
   if(!inOffice && sel===id && page==="menu") renderCard();
   selLive.textContent = "";
@@ -1445,6 +1447,7 @@ function pieMode(){
 function openPie(id){
   closePie(false);
   var p = pie = {id:id, trigger:remember(document.activeElement), t0:performance.now()};
+  if(following){ following = false; A3().follow(null); syncFollow(); }   /* someone else picked: follow ends, as with select() */
   A3().mark(id); A3().focus(id);
   addEventListener("pointerdown", pieOutside, true); addEventListener("wheel", pieWheel, {capture:true, passive:true});
   (function wait(){   /* once the camera has framed them (at most 1.5 s) */
@@ -1543,10 +1546,13 @@ function select(id, opts){
   else if(A3()) A3().focus(id);   /* while the full sheet covers the office, the scene frames them once it comes back down */
   if(A3()) A3().mark(id);
   syncFollow();
-  if(opts.list) requestAnimationFrame(showAll);
+  var into = id!=="zeno" && !linkMuted && !opts.keep && !(again && !opts.page && !opts.list);
+  /* straight to the whole list (a long-press, the "+N" note, See all from a task): focus its first row, in view once
+     the list has scrolled up; anything else opens at the top, on its first control */
+  if(opts.list) requestAnimationFrame(function(){ showAll(); var r = into && sel===id && botCard.querySelector("#cardAll [data-task]"); if(r) r.focus({preventScroll:true}); else if(into) focusFirst(); });
   else sheetBody.scrollTop = 0;
-  if(id!=="zeno" && !linkMuted && !opts.keep && !(again && !opts.page && !opts.list)) focusFirst();
-  else if(inSheet) cardSum.focus();
+  if(into && !opts.list) focusFirst();
+  else if(!into && inSheet) cardSum.focus();
   selLive.textContent = cardTitle.textContent+". "+cardAct.textContent+(id==="zeno" ? "" : ". "+countsLine(id)+".");
   writeLink();
 }
@@ -1947,6 +1953,7 @@ window.BotOffice = {
   /* a tap in the office: on a bot (its body, desk or bubble) its menu; on nothing (empty floor) the open one closes */
   tapBot:function(id, opts){ if(!(opts && opts.list) && pieMode() && sel!==id) openPie(id); else select(id, opts); },
   tapNothing:function(){ if(performance.now()-pieShut < 700) return; if(pie) closePie(true); else if(sel) deselect(); },   /* one tap closes one thing */
+  pieJustShut:function(){ return performance.now()-pieShut < 50; },   /* this very pointerdown closed a pie (capture phase, before the office sees it) */
   setFollow:setFollow, following:function(){return following;}, followEnded:followEnded,
   onChange:function(fn){listeners.push(fn);},
   /* sheet state for the 3D layer: how much of the office it covers now, and at its smallest */
@@ -2665,7 +2672,8 @@ function start(){
     viewRect: () => stageRects().view, freeRect: () => stageRects().free, clampRect: () => stageRects().clamp, topInset: 56,
     pick: (x, y) => pickAt(x, y),
     onTap: p => { if(!p){ A.tapNothing(); return; } if(p.task) A.openModal(p.task); else if(p.bot) A.tapBot(p.bot, {list:!!p.list}); else if(p.person) A.select(p.person); else if(p.zeno) A.goZeno(); },
-    onUser: () => { hideHint(); if(!roomGoing) setRoom(null); }, onUnfollow: () => A.followEnded()
+    onUser: () => { hideHint(); if(!roomGoing) setRoom(null); }, onUnfollow: () => A.followEnded(),
+    through: () => A.pieJustShut()   // the glide was a waiting pie's: the click that closed it still picks
   });
   window.officeCam = cam;
   camctl.hidden = false;
@@ -3657,7 +3665,7 @@ function createMapCam(o){
     const wasMoving = !!(anim || fling);   // a touch that stops a glide or a coasting pan only stops it: no tap, no click
     stop(); lastType = e.pointerType;
     if(!ptrs.size){
-      seq = {moved:false, multi:false, cap:false, stopper:wasMoving};
+      seq = {moved:false, multi:false, cap:false, stopper:wasMoving && !(o.through && o.through())};
       second = !!(lastTap && e.pointerType !== 'mouse' && e.timeStamp - lastTap.t < DOUBLE_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32);
       if(second){ clearTimeout(tapTimer); lastTap = null; }
     } else seq.multi = true;
